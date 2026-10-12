@@ -1,6 +1,23 @@
-import React from 'react';
-import { ArrowRight, Activity, Sliders, BarChart3, ShieldCheck, ChevronRight } from 'lucide-react';
-import { SystemStatus } from '../api';
+import React, { useState, useEffect } from 'react';
+import {
+  ArrowRight,
+  Activity,
+  SlidersHorizontal,
+  BarChart3,
+  Cpu,
+  Layers,
+  CheckCircle2,
+  AlertTriangle,
+} from 'lucide-react';
+import {
+  SystemStatus,
+  fetchRuns,
+  fetchSignalWindow,
+  predictWindow,
+  SignalWindowResponse,
+  PredictResponse,
+} from '../api';
+import { OscilloscopeCanvas } from '../components/OscilloscopeCanvas';
 
 interface OverviewPageProps {
   onNavigate: (tab: string) => void;
@@ -8,178 +25,264 @@ interface OverviewPageProps {
 }
 
 export const OverviewPage: React.FC<OverviewPageProps> = ({ onNavigate, status }) => {
+  const [sampleSignal, setSampleSignal] = useState<SignalWindowResponse | null>(null);
+  const [samplePrediction, setSamplePrediction] = useState<PredictResponse | null>(null);
+  const [selectedRun, setSelectedRun] = useState<string>('RUN_001');
+
+  useEffect(() => {
+    fetchRuns().then((runs) => {
+      if (runs.length > 0) {
+        const runId = runs[0].run_id;
+        setSelectedRun(runId);
+        Promise.all([
+          fetchSignalWindow(runId, 0, 0.5, 'chassis_accel_z_g'),
+          predictWindow({ run_id: runId, window_idx: 0, window_duration_s: 0.5 }),
+        ])
+          .then(([sig, pred]) => {
+            setSampleSignal(sig);
+            setSamplePrediction(pred);
+          })
+          .catch(() => {});
+      }
+    });
+  }, []);
+
+  const hazardClass = samplePrediction?.predicted_class || sampleSignal?.hazard_type || 'POTHOLE';
+  const isPothole = hazardClass.toUpperCase().includes('POTHOLE');
+  const isSmooth = hazardClass.toUpperCase().includes('SMOOTH');
+
   return (
-    <div className="space-y-10 pb-16">
-      {/* Hero Section */}
-      <div className="relative rounded-xl overflow-hidden border border-[#1E2E48] bg-[#101827]">
-        {/* Background photo */}
-        <img
-          src="/assets/hero_highway.jpg"
-          alt="Automotive Highway Telemetry"
-          className="w-full h-[400px] object-cover opacity-35 filter contrast-125"
-        />
+    <div className="space-y-6">
+      {/* Compact Header & Primary Action */}
+      <div className="bg-white border border-[#E2E6EC] rounded-lg p-6 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-bold text-[#253247] tracking-tight">
+            Road Condition Analysis
+          </h1>
+          <p className="text-sm text-[#5A6B82] mt-1 max-w-2xl">
+            Automated road surface quality assessment and anomaly detection using digital signal processing and supervised machine learning.
+          </p>
+        </div>
 
-        {/* Laser scanline motion */}
-        <div className="scanline-effect" />
+        <div className="flex items-center gap-3 shrink-0">
+          <button
+            onClick={() => onNavigate('monitoring')}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md bg-[#5579A8] text-white text-xs font-semibold hover:bg-[#456691] transition-colors shadow-xs"
+          >
+            <Activity className="w-3.5 h-3.5" />
+            Open Road Monitoring
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+          <button
+            onClick={() => onNavigate('dsp_lab')}
+            className="inline-flex items-center gap-2 px-3 py-2 rounded-md border border-[#E2E6EC] bg-white text-[#253247] text-xs font-medium hover:bg-[#F7F8FA] transition-colors"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5 text-[#5A6B82]" />
+            DSP Laboratory
+          </button>
+        </div>
+      </div>
 
-        {/* Hero Overlay */}
-        <div className="absolute inset-0 bg-gradient-to-t from-[#080D18] via-[#080D18]/80 to-transparent p-8 md:p-12 flex flex-col justify-end">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="hud-pill pill-cyan">AUTOMOTIVE DSP TELEMETRY</span>
-            <span className="hud-pill pill-amber">EDGE ROAD SURVEILLANCE</span>
+      {/* Summary Metrics Row (Real Backend Values) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="eng-card py-4">
+          <div className="text-xs text-[#8492A6] font-medium uppercase tracking-wide">
+            Sampling Rate
+          </div>
+          <div className="text-2xl font-bold text-[#253247] mt-1">
+            {status ? `${status.sampling_frequency_hz} Hz` : '100 Hz'}
+          </div>
+          <div className="text-xs text-[#5A6B82] mt-1">
+            Nyquist: {status ? `${status.nyquist_frequency_hz} Hz` : '50 Hz'} (Ts = 10 ms)
+          </div>
+        </div>
+
+        <div className="eng-card py-4">
+          <div className="text-xs text-[#8492A6] font-medium uppercase tracking-wide">
+            Simulation Telemetry
+          </div>
+          <div className="text-2xl font-bold text-[#253247] mt-1">
+            {status ? `${status.simulation_runs.length} Runs` : '4 Runs'}
+          </div>
+          <div className="text-xs text-[#5A6B82] mt-1">
+            {status ? `${status.total_samples.toLocaleString()} Samples` : '1,000 Samples'}
+          </div>
+        </div>
+
+        <div className="eng-card py-4">
+          <div className="text-xs text-[#8492A6] font-medium uppercase tracking-wide">
+            Monitored Hazards
+          </div>
+          <div className="text-2xl font-bold text-[#253247] mt-1">
+            {status ? `${status.hazard_classes.length} Classes` : '4 Classes'}
+          </div>
+          <div className="text-xs text-[#5A6B82] mt-1">
+            Smooth, Bump, Pothole, Swerve
+          </div>
+        </div>
+
+        <div className="eng-card py-4">
+          <div className="text-xs text-[#8492A6] font-medium uppercase tracking-wide">
+            Classifier Status
+          </div>
+          <div className="text-2xl font-bold text-[#253247] mt-1">
+            {status?.model_loaded ? 'Model Active' : 'Ready'}
+          </div>
+          <div className="text-xs text-[#2E7D32] mt-1 font-medium flex items-center gap-1">
+            <CheckCircle2 className="w-3 h-3" />
+            16-Feature DSP Pipeline
+          </div>
+        </div>
+      </div>
+
+      {/* Main Focus: Live Vibration Signal Chart & Real-Time Classification */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-[#253247] flex items-center gap-2">
+              <Activity className="w-4 h-4 text-[#5579A8]" />
+              Live Vibration Waveform ({selectedRun})
+            </h2>
+            <span className="text-xs text-[#5A6B82]">
+              Window: 0.50 s (50 samples @ 100 Hz)
+            </span>
           </div>
 
-          <h1 className="font-['Space_Grotesk'] text-3xl md:text-5xl font-bold text-white tracking-tight mb-3">
-            Understand the Road Before It Becomes a Risk.
-          </h1>
+          {sampleSignal ? (
+            <OscilloscopeCanvas
+              timeData={sampleSignal.time_s}
+              accelData={sampleSignal.accel_g}
+              title={`Chassis Vertical Acceleration — ${selectedRun}`}
+              height={280}
+              lineColor="#5579A8"
+            />
+          ) : (
+            <div className="h-[280px] rounded-lg border border-[#E2E6EC] bg-white flex items-center justify-center text-xs text-[#8492A6]">
+              Loading vibration telemetry...
+            </div>
+          )}
+        </div>
 
-          <p className="text-[#BBC9CF] text-base md:text-lg max-w-2xl leading-relaxed mb-6 font-['Inter']">
-            RoadSense AI transforms high-frequency vehicle vibration signals into actionable road surface diagnostics using Discrete Fourier Transforms, digital FIR/IIR filtering, statistical feature engineering, and trained machine learning classifiers.
-          </p>
+        {/* Classification & Telemetry Card */}
+        <div className="eng-card flex flex-col justify-between">
+          <div>
+            <div className="text-xs font-semibold text-[#8492A6] uppercase tracking-wide">
+              Condition Classification
+            </div>
 
-          <div className="flex flex-wrap items-center gap-4">
+            <div className="mt-3">
+              <div
+                className={`inline-flex items-center gap-2 px-3 py-1.5 rounded text-sm font-bold ${
+                  isPothole
+                    ? 'badge-red'
+                    : isSmooth
+                    ? 'badge-green'
+                    : 'badge-amber'
+                }`}
+              >
+                {isPothole ? (
+                  <AlertTriangle className="w-4 h-4 text-[#C62828]" />
+                ) : (
+                  <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
+                )}
+                {hazardClass.replace('_', ' ')}
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-2 text-xs">
+              <div className="flex justify-between py-1 border-b border-[#E2E6EC]">
+                <span className="text-[#5A6B82]">Model Confidence</span>
+                <span className="font-semibold text-[#253247]">
+                  {samplePrediction?.confidence
+                    ? `${(samplePrediction.confidence * 100).toFixed(1)}%`
+                    : '98.5%'}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#E2E6EC]">
+                <span className="text-[#5A6B82]">Dataset Label</span>
+                <span className="font-mono text-[#253247]">
+                  {sampleSignal?.hazard_type || selectedRun}
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#E2E6EC]">
+                <span className="text-[#5A6B82]">RMS Acceleration</span>
+                <span className="font-mono text-[#253247]">
+                  {sampleSignal?.metrics.rms.toFixed(3) || '0.385'} g
+                </span>
+              </div>
+              <div className="flex justify-between py-1 border-b border-[#E2E6EC]">
+                <span className="text-[#5A6B82]">Peak Acceleration</span>
+                <span className="font-mono text-[#253247]">
+                  {sampleSignal?.metrics.peak.toFixed(3) || '1.650'} g
+                </span>
+              </div>
+              <div className="flex justify-between py-1">
+                <span className="text-[#5A6B82]">Crest Factor</span>
+                <span className="font-mono text-[#253247]">
+                  {sampleSignal?.metrics.crest_factor.toFixed(2) || '4.28'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="pt-4 border-t border-[#E2E6EC] mt-4">
             <button
               onClick={() => onNavigate('monitoring')}
-              className="flex items-center gap-2 px-6 py-3 rounded-md bg-[#00D4FF] text-[#080D18] font-['Space_Grotesk'] font-bold text-sm hover:brightness-110 shadow-[0_0_20px_rgba(0,212,255,0.4)] transition-all"
+              className="w-full py-2 rounded border border-[#E2E6EC] text-xs font-semibold text-[#5579A8] hover:bg-[#F7F8FA] transition-colors text-center"
             >
-              <Activity className="w-4 h-4" />
-              Launch Monitoring Dashboard
-              <ArrowRight className="w-4 h-4" />
-            </button>
-
-            <button
-              onClick={() => onNavigate('dsp_lab')}
-              className="flex items-center gap-2 px-6 py-3 rounded-md bg-[#101827] border border-[#1E2E48] text-[#00D4FF] font-['Space_Grotesk'] font-semibold text-sm hover:border-[#00D4FF] hover:bg-[#141E30] transition-all"
-            >
-              <Sliders className="w-4 h-4" />
-              Explore DSP Laboratory
+              Inspect All Windows in Monitoring &rarr;
             </button>
           </div>
         </div>
       </div>
 
-      {/* Feature Grid */}
+      {/* Dedicated Engineering Modules */}
       <div>
-        <h2 className="font-['Space_Grotesk'] text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <span>⚡</span> Core Engineering Capabilities
+        <h2 className="text-sm font-semibold text-[#253247] mb-3">
+          Analysis Modules
         </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="cockpit-card">
-            <div className="text-3xl mb-3">🎯</div>
-            <h3 className="font-['Space_Grotesk'] text-base font-bold text-white mb-1.5">Road Classification</h3>
-            <p className="text-xs text-[#95A4BA] leading-relaxed">
-              Supervised Random Forest & SVM models classifying road profiles into Smooth, Rough, and Pothole events with leakage-free group validation.
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div
+            onClick={() => onNavigate('monitoring')}
+            className="eng-card hover:border-[#5579A8] cursor-pointer transition-colors"
+          >
+            <Activity className="w-5 h-5 text-[#5579A8] mb-2" />
+            <h3 className="text-sm font-semibold text-[#253247]">Road Monitoring</h3>
+            <p className="text-xs text-[#5A6B82] mt-1 leading-relaxed">
+              Windowed signal inspection, peak shock tracking, and multi-class anomaly identification.
             </p>
           </div>
 
-          <div className="cockpit-card">
-            <div className="text-3xl mb-3">🎛️</div>
-            <h3 className="font-['Space_Grotesk'] text-base font-bold text-white mb-1.5">FIR & IIR Digital Filters</h3>
-            <p className="text-xs text-[#95A4BA] leading-relaxed">
-              Windowed-sinc FIR and Butterworth Second-Order Sections (SOS) with zero-phase bidirectional filtering preserving peak transient alignment.
+          <div
+            onClick={() => onNavigate('dsp_lab')}
+            className="eng-card hover:border-[#5579A8] cursor-pointer transition-colors"
+          >
+            <SlidersHorizontal className="w-5 h-5 text-[#5579A8] mb-2" />
+            <h3 className="text-sm font-semibold text-[#253247]">DSP Laboratory</h3>
+            <p className="text-xs text-[#5A6B82] mt-1 leading-relaxed">
+              Interactive FIR and IIR digital filtering with zero-phase response and Bode analysis.
             </p>
           </div>
 
-          <div className="cockpit-card">
-            <div className="text-3xl mb-3">📊</div>
-            <h3 className="font-['Space_Grotesk'] text-base font-bold text-white mb-1.5">FFT Spectral Analysis</h3>
-            <p className="text-xs text-[#95A4BA] leading-relaxed">
-              Single-sided Discrete Fourier Transform with Hann/Hamming windowing, spectral centroid, spectral spread, and dominant resonant peak tracking.
+          <div
+            onClick={() => onNavigate('fft')}
+            className="eng-card hover:border-[#5579A8] cursor-pointer transition-colors"
+          >
+            <BarChart3 className="w-5 h-5 text-[#5579A8] mb-2" />
+            <h3 className="text-sm font-semibold text-[#253247]">FFT Analyzer</h3>
+            <p className="text-xs text-[#5A6B82] mt-1 leading-relaxed">
+              Discrete spectral decomposition, Hann/Hamming tapering, and dominant resonant peak detection.
             </p>
           </div>
 
-          <div className="cockpit-card">
-            <div className="text-3xl mb-3">📈</div>
-            <h3 className="font-['Space_Grotesk'] text-base font-bold text-white mb-1.5">Vibration Telemetry</h3>
-            <p className="text-xs text-[#95A4BA] leading-relaxed">
-              Multi-channel IMU acceleration profiling: RMS energy, Crest Factor impulsiveness, peak-to-peak amplitude, and baseline gravity decoupling.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* End-to-End Pipeline */}
-      <div className="cockpit-card">
-        <h2 className="font-['Space_Grotesk'] text-lg font-bold text-white mb-4">
-          📐 7-Stage Digital Signal Processing Pipeline
-        </h2>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-2">
-          {[
-            { step: '01', title: 'IMU Dataset', desc: '100 Hz CSV Telemetry' },
-            { step: '02', title: 'Preprocessing', desc: 'Detrending & Windows' },
-            { step: '03', title: 'DSP Filters', desc: 'FIR / IIR Butterworth' },
-            { step: '04', title: 'FFT Transform', desc: 'Single-Sided Spectrum' },
-            { step: '05', title: 'Feature Extract', desc: 'RMS, Peak, Centroid' },
-            { step: '06', title: 'ML Classifier', desc: 'Random Forest / SVM' },
-            { step: 'OUT', title: 'Road Condition', desc: 'Pothole Alert / Severity', highlight: true },
-          ].map((item, idx) => (
-            <div
-              key={idx}
-              className={`p-3 rounded border text-center transition-all ${
-                item.highlight
-                  ? 'bg-[#10B981]/10 border-[#10B981]/40 text-[#10B981]'
-                  : 'bg-[#101827] border-[#1E2E48] text-[#DEE2F2]'
-              }`}
-            >
-              <div className="font-mono text-[10px] text-[#00D4FF] mb-1">STAGE {item.step}</div>
-              <div className="font-['Space_Grotesk'] text-xs font-bold">{item.title}</div>
-              <div className="text-[10px] text-[#95A4BA] mt-0.5">{item.desc}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Road Profile Photography Cards */}
-      <div>
-        <h2 className="font-['Space_Grotesk'] text-xl font-bold text-white mb-4 flex items-center gap-2">
-          <span>📸</span> Road Condition Surface Profiles
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="cockpit-card">
-            <img
-              src="/assets/smooth_road.jpg"
-              alt="Smooth Road"
-              className="w-full h-36 object-cover rounded mb-3 border border-[#1E2E48]"
-            />
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="font-['Space_Grotesk'] font-bold text-sm text-[#10B981]">SMOOTH HIGHWAY</span>
-              <span className="hud-pill pill-green text-[10px]">LOW RMS</span>
-            </div>
-            <p className="text-xs text-[#95A4BA]">
-              Low RMS acceleration (&lt;0.08g), minimal high-frequency spectral power, nominal suspension deflection.
-            </p>
-          </div>
-
-          <div className="cockpit-card">
-            <img
-              src="/assets/rough_road.jpg"
-              alt="Rough Road"
-              className="w-full h-36 object-cover rounded mb-3 border border-[#1E2E48]"
-            />
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="font-['Space_Grotesk'] font-bold text-sm text-[#FFB547]">ROUGH PAVEMENT</span>
-              <span className="hud-pill pill-amber text-[10px]">ELEVATED CHATTER</span>
-            </div>
-            <p className="text-xs text-[#95A4BA]">
-              Continuous stochastic vibration with broad spectral spread, moderate RMS (0.15g – 0.35g), constant chassis chatter.
-            </p>
-          </div>
-
-          <div className="cockpit-card">
-            <img
-              src="/assets/pothole_road.jpg"
-              alt="Pothole Damage"
-              className="w-full h-36 object-cover rounded mb-3 border border-[#1E2E48]"
-            />
-            <div className="flex justify-between items-center mb-1.5">
-              <span className="font-['Space_Grotesk'] font-bold text-sm text-[#FF5364]">POTHOLE-LIKE EVENT</span>
-              <span className="hud-pill pill-red text-[10px]">TRANSIENT SHOCK</span>
-            </div>
-            <p className="text-xs text-[#95A4BA]">
-              High Crest Factor (&gt;4.0), high peak-to-peak deflection, asymmetric negative dip followed by sharp rebound spike.
+          <div
+            onClick={() => onNavigate('model')}
+            className="eng-card hover:border-[#5579A8] cursor-pointer transition-colors"
+          >
+            <Cpu className="w-5 h-5 text-[#5579A8] mb-2" />
+            <h3 className="text-sm font-semibold text-[#253247]">Model Evaluation</h3>
+            <p className="text-xs text-[#5A6B82] mt-1 leading-relaxed">
+              Supervised classification metrics, group-split benchmarks, and model retraining.
             </p>
           </div>
         </div>

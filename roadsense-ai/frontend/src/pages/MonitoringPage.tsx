@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { Download, AlertTriangle, CheckCircle, Flame, RefreshCw } from 'lucide-react';
+import {
+  Download,
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Activity,
+  Sliders,
+} from 'lucide-react';
 import {
   fetchRuns,
   fetchSignalWindow,
@@ -59,241 +67,267 @@ export const MonitoringPage: React.FC = () => {
 
   if (error) {
     return (
-      <div className="p-8 text-center bg-[#101827] rounded-lg border border-[#FF5364]/40">
-        <AlertTriangle className="w-8 h-8 text-[#FF5364] mx-auto mb-2" />
-        <h3 className="text-white font-bold text-lg mb-1">Telemetry Signal Error</h3>
-        <p className="text-sm text-[#95A4BA]">{error}</p>
+      <div className="p-8 text-center bg-white rounded-lg border border-[#E2E6EC] shadow-xs">
+        <AlertTriangle className="w-8 h-8 text-[#C62828] mx-auto mb-2" />
+        <h3 className="text-[#253247] font-semibold text-base mb-1">Telemetry Signal Error</h3>
+        <p className="text-sm text-[#5A6B82]">{error}</p>
       </div>
     );
   }
 
-  const currentClass = prediction?.predicted_class || signalData?.hazard_type || 'SMOOTH';
+  const currentClass = prediction?.predicted_class || signalData?.hazard_type || 'SMOOTH_HIGHWAY';
+  const groundTruth = signalData?.hazard_type || '';
+  const isMatch = prediction && groundTruth && prediction.predicted_class.toUpperCase() === groundTruth.toUpperCase();
   const isPothole = currentClass.toUpperCase().includes('POTHOLE');
-  const isRough = currentClass.toUpperCase().includes('ROUGH') || currentClass.toUpperCase().includes('BUMP') || currentClass.toUpperCase().includes('SWERVE');
+  const isSmooth = currentClass.toUpperCase().includes('SMOOTH');
 
   return (
-    <div className="space-y-6 pb-16">
-      {/* Top Header & Telemetry Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#1E2E48] pb-4">
+    <div className="space-y-6">
+      {/* Page Heading & Context */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#E2E6EC] pb-4">
         <div>
-          <h1 className="font-['Space_Grotesk'] text-2xl font-bold text-white tracking-tight flex items-center gap-2">
-            📡 Road Telemetry & Condition Monitor
+          <h1 className="text-xl sm:text-2xl font-bold text-[#253247] tracking-tight">
+            Road Monitoring
           </h1>
-          <p className="text-xs text-[#95A4BA] mt-0.5">
-            Active 100 Hz IMU vibration window inspector & machine-learning classification telemetry.
+          <p className="text-xs text-[#5A6B82] mt-0.5">
+            100 Hz IMU vibration window inspection and supervised road condition classification.
           </p>
         </div>
 
-        {/* Telemetry Selectors */}
-        <div className="flex flex-wrap items-center gap-3">
+        <a
+          href={`http://localhost:8000/api/export/signal?run_id=${selectedRun}`}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E6EC] bg-white text-xs font-medium text-[#253247] hover:bg-[#F7F8FA] transition-colors self-start sm:self-auto"
+        >
+          <Download className="w-3.5 h-3.5 text-[#5A6B82]" />
+          Export Run CSV
+        </a>
+      </div>
+
+      {/* Control Toolbar */}
+      <div className="eng-card py-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
           <div>
-            <label className="block text-[10px] font-mono text-[#95A4BA] uppercase mb-1">Simulation Run</label>
+            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
+              Simulation Run
+            </label>
             <select
               value={selectedRun}
               onChange={(e) => {
                 setSelectedRun(e.target.value);
                 setWindowIdx(0);
               }}
-              className="bg-[#101827] border border-[#1E2E48] text-white text-xs rounded px-3 py-1.5 focus:border-[#00D4FF] focus:outline-none font-mono"
+              className="clean-select w-full"
             >
               {runs.map((r) => (
                 <option key={r.run_id} value={r.run_id}>
-                  {r.run_id} ({r.hazard_type})
+                  {r.run_id} — {r.hazard_type} ({r.samples} samples)
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-[#95A4BA] uppercase mb-1">IMU Channel</label>
+            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
+              Sensor Channel
+            </label>
             <select
               value={channel}
               onChange={(e) => setChannel(e.target.value)}
-              className="bg-[#101827] border border-[#1E2E48] text-white text-xs rounded px-3 py-1.5 focus:border-[#00D4FF] focus:outline-none font-mono"
+              className="clean-select w-full"
             >
-              <option value="chassis_accel_z_g">chassis_accel_z_g</option>
-              <option value="wheel_displacement_mm">wheel_displacement_mm</option>
-              <option value="suspension_deflection_mm">suspension_deflection_mm</option>
+              <option value="chassis_accel_z_g">chassis_accel_z_g (Vertical Acceleration)</option>
+              <option value="wheel_displacement_mm">wheel_displacement_mm (Wheel Hub Travel)</option>
+              <option value="suspension_deflection_mm">suspension_deflection_mm (Spring Deflection)</option>
             </select>
           </div>
 
           <div>
-            <label className="block text-[10px] font-mono text-[#95A4BA] uppercase mb-1">Window Duration</label>
+            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
+              Analysis Window Duration
+            </label>
             <select
               value={windowDur}
               onChange={(e) => {
                 setWindowDur(parseFloat(e.target.value));
                 setWindowIdx(0);
               }}
-              className="bg-[#101827] border border-[#1E2E48] text-white text-xs rounded px-3 py-1.5 focus:border-[#00D4FF] focus:outline-none font-mono"
+              className="clean-select w-full"
             >
-              <option value="0.25">0.25 s (25 pts)</option>
-              <option value="0.5">0.50 s (50 pts)</option>
-              <option value="1.0">1.00 s (100 pts)</option>
+              <option value="0.25">0.25 s (25 samples @ 100 Hz)</option>
+              <option value="0.5">0.50 s (50 samples @ 100 Hz)</option>
+              <option value="1.0">1.00 s (100 samples @ 100 Hz)</option>
             </select>
+          </div>
+
+          {/* Window Navigation Controls */}
+          <div>
+            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
+              Window {signalData ? `${windowIdx + 1} of ${signalData.total_windows}` : '—'}
+            </label>
+            <div className="flex items-center gap-1.5">
+              <button
+                disabled={windowIdx <= 0}
+                onClick={() => setWindowIdx((prev) => Math.max(0, prev - 1))}
+                className="px-2.5 py-1.5 rounded border border-[#E2E6EC] bg-white text-xs text-[#253247] hover:bg-[#F7F8FA] disabled:opacity-40 transition-colors"
+                title="Previous Window"
+              >
+                <ChevronLeft className="w-4 h-4" />
+              </button>
+
+              <input
+                type="range"
+                min="0"
+                max={signalData ? Math.max(0, signalData.total_windows - 1) : 0}
+                value={windowIdx}
+                onChange={(e) => setWindowIdx(parseInt(e.target.value))}
+                className="w-full accent-[#5579A8] cursor-pointer"
+              />
+
+              <button
+                disabled={signalData ? windowIdx >= signalData.total_windows - 1 : true}
+                onClick={() => setWindowIdx((prev) => prev + 1)}
+                className="px-2.5 py-1.5 rounded border border-[#E2E6EC] bg-white text-xs text-[#253247] hover:bg-[#F7F8FA] disabled:opacity-40 transition-colors"
+                title="Next Window"
+              >
+                <ChevronRight className="w-4 h-4" />
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Prominent Road Condition Alert Banner */}
-      <div
-        className={`rounded-lg p-5 border transition-all flex flex-col md:flex-row items-start md:items-center justify-between gap-4 ${
-          isPothole
-            ? 'bg-gradient-to-r from-[#FF5364]/20 to-[#141E30] border-[#FF5364] shadow-[0_0_24px_rgba(255,83,100,0.2)]'
-            : isRough
-            ? 'bg-gradient-to-r from-[#FFB547]/20 to-[#141E30] border-[#FFB547]'
-            : 'bg-gradient-to-r from-[#10B981]/15 to-[#141E30] border-[#10B981]/50'
-        }`}
-      >
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            {isPothole ? (
-              <Flame className="w-6 h-6 text-[#FF5364] animate-pulse" />
-            ) : isRough ? (
-              <AlertTriangle className="w-6 h-6 text-[#FFB547]" />
-            ) : (
-              <CheckCircle className="w-6 h-6 text-[#10B981]" />
-            )}
-            <span className="font-['Space_Grotesk'] text-2xl font-bold tracking-wide text-white">
-              {currentClass.toUpperCase()}
+      {/* Main Signal Waveform & Road-Condition Results Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Left: Waveform Canvas */}
+        <div className="lg:col-span-2 space-y-2">
+          <div className="flex items-center justify-between text-xs text-[#5A6B82]">
+            <span className="font-semibold text-[#253247]">
+              Windowed Waveform: {selectedRun} — Segment {windowIdx + 1}
             </span>
-
-            {prediction?.confidence && (
-              <span className="hud-pill pill-cyan">
-                CONFIDENCE: {(prediction.confidence * 100).toFixed(1)}%
-              </span>
-            )}
+            <span>Sampling: 100 Hz | Interval: 10 ms</span>
           </div>
 
-          <p className="text-xs text-[#CBD5E1] max-w-xl">
-            {isPothole
-              ? 'Severe transient shock detected. Vertical acceleration spike exceeds suspension rebound limit.'
-              : isRough
-              ? 'Elevated continuous chatter detected. Broad vibration bandwidth with elevated RMS energy.'
-              : 'Nominal pavement surface. Vertical acceleration remains within baseline threshold.'}
-          </p>
-          <p className="text-[10px] text-[#95A4BA] mt-1 italic">
-            *Ground Truth Tag: {signalData?.hazard_type || 'N/A'} | Note: Pothole-like events represent impulsive impact signatures.
-          </p>
-        </div>
-
-        <div className="font-mono text-xs text-right text-[#95A4BA] self-end md:self-center">
-          <div>WINDOW: W-{windowIdx.toString().padStart(3, '0')} / {((signalData?.total_windows || 1) - 1).toString().padStart(3, '0')}</div>
-          {signalData && signalData.time_s.length > 0 && (
-            <div className="text-[#00D4FF] font-semibold mt-1">
-              Time: {signalData.time_s[0].toFixed(2)}s – {signalData.time_s[signalData.time_s.length - 1].toFixed(2)}s
+          {signalData ? (
+            <OscilloscopeCanvas
+              timeData={signalData.time_s}
+              accelData={signalData.accel_g}
+              title={`Vibration Acceleration — ${channel}`}
+              height={320}
+              lineColor="#5579A8"
+            />
+          ) : (
+            <div className="h-[320px] rounded-lg border border-[#E2E6EC] bg-white flex items-center justify-center text-xs text-[#8492A6]">
+              {loading ? 'Processing signal window...' : 'No telemetry data loaded.'}
             </div>
           )}
         </div>
-      </div>
 
-      {/* Window Slider Bar */}
-      {signalData && signalData.total_windows > 1 && (
-        <div className="cockpit-card py-3 px-4">
-          <div className="flex justify-between items-center text-xs font-mono text-[#95A4BA] mb-2">
-            <span>SLIDING WINDOW SELECTOR</span>
-            <span className="text-[#00D4FF]">WINDOW W-{windowIdx.toString().padStart(3, '0')}</span>
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={signalData.total_windows - 1}
-            value={windowIdx}
-            onChange={(e) => setWindowIdx(parseInt(e.target.value))}
-            className="w-full accent-[#00D4FF] cursor-pointer"
-          />
-        </div>
-      )}
-
-      {/* Signal Metric Pods Grid */}
-      {signalData && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <div className="p-3.5 rounded bg-[#101827] border border-[#1E2E48]">
-            <div className="text-[10px] font-mono text-[#95A4BA] uppercase">RMS Energy</div>
-            <div className="text-xl font-mono font-bold text-[#00D4FF] mt-0.5">{signalData.metrics.rms.toFixed(3)} g</div>
-            <div className="text-[10px] text-[#718096]">Signal amplitude</div>
-          </div>
-
-          <div className="p-3.5 rounded bg-[#101827] border border-[#1E2E48]">
-            <div className="text-[10px] font-mono text-[#95A4BA] uppercase">Peak Absolute</div>
-            <div className="text-xl font-mono font-bold text-[#00D4FF] mt-0.5">{signalData.metrics.peak.toFixed(3)} g</div>
-            <div className="text-[10px] text-[#718096]">Max shock deflection</div>
-          </div>
-
-          <div className="p-3.5 rounded bg-[#101827] border border-[#1E2E48]">
-            <div className="text-[10px] font-mono text-[#95A4BA] uppercase">Peak-to-Peak</div>
-            <div className="text-xl font-mono font-bold text-[#00D4FF] mt-0.5">{signalData.metrics.p2p.toFixed(3)} g</div>
-            <div className="text-[10px] text-[#718096]">Total deflection span</div>
-          </div>
-
-          <div className="p-3.5 rounded bg-[#101827] border border-[#1E2E48]">
-            <div className="text-[10px] font-mono text-[#95A4BA] uppercase">Crest Factor</div>
-            <div
-              className={`text-xl font-mono font-bold mt-0.5 ${
-                signalData.metrics.crest_factor > 4.0 ? 'text-[#FF5364]' : 'text-[#00D4FF]'
-              }`}
-            >
-              {signalData.metrics.crest_factor.toFixed(2)}
+        {/* Right: Road Condition Classification Card */}
+        <div className="space-y-4">
+          <div className="eng-card space-y-4">
+            <div>
+              <div className="text-xs font-semibold text-[#8492A6] uppercase tracking-wide">
+                Road Condition Classification
+              </div>
+              <div className="mt-2.5">
+                <span
+                  className={`badge-clean text-sm font-semibold px-3 py-1.5 ${
+                    isPothole
+                      ? 'badge-red'
+                      : isSmooth
+                      ? 'badge-green'
+                      : 'badge-amber'
+                  }`}
+                >
+                  {isPothole ? (
+                    <AlertTriangle className="w-4 h-4 text-[#C62828]" />
+                  ) : (
+                    <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
+                  )}
+                  {currentClass.replace('_', ' ')}
+                </span>
+              </div>
             </div>
-            <div className="text-[10px] text-[#718096]">Impulsive shock ratio</div>
-          </div>
 
-          <div className="p-3.5 rounded bg-[#101827] border border-[#1E2E48]">
-            <div className="text-[10px] font-mono text-[#95A4BA] uppercase">Std Dev (σ)</div>
-            <div className="text-xl font-mono font-bold text-[#00D4FF] mt-0.5">{signalData.metrics.std.toFixed(3)} g</div>
-            <div className="text-[10px] text-[#718096]">Variance spread</div>
-          </div>
-        </div>
-      )}
+            {/* Comparison of Actual Measurement vs Model Prediction */}
+            <div className="space-y-2.5 pt-2 border-t border-[#E2E6EC] text-xs">
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[#5A6B82]">Model Prediction</span>
+                <span className="font-semibold text-[#253247]">
+                  {prediction ? prediction.predicted_class : 'Evaluating...'}
+                </span>
+              </div>
 
-      {/* Oscilloscope Waveform Canvas */}
-      {signalData && (
-        <OscilloscopeCanvas
-          timeData={signalData.time_s}
-          accelData={signalData.accel_g}
-          title={`CHASSIS ACCELERATION (Z-AXIS) | ${selectedRun} W-${windowIdx.toString().padStart(3, '0')}`}
-          warningLimit={1.8}
-          height={320}
-        />
-      )}
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[#5A6B82]">Prediction Confidence</span>
+                <span className="font-mono font-medium text-[#253247]">
+                  {prediction?.confidence
+                    ? `${(prediction.confidence * 100).toFixed(1)}%`
+                    : '—'}
+                </span>
+              </div>
 
-      {/* Classifier Probability Breakdown */}
-      {prediction?.probabilities && (
-        <div className="cockpit-card">
-          <h3 className="font-['Space_Grotesk'] text-sm font-bold text-white mb-3">
-            📊 Model Class Probability Distribution
-          </h3>
-          <div className="space-y-2">
-            {prediction.all_classes.map((clsName, idx) => {
-              const prob = prediction.probabilities![idx];
-              const pct = (prob * 100).toFixed(1);
-              const isHighlight = clsName === prediction.predicted_class;
-              return (
-                <div key={clsName} className="space-y-1">
-                  <div className="flex justify-between text-xs font-mono">
-                    <span className={isHighlight ? 'text-[#00D4FF] font-bold' : 'text-[#95A4BA]'}>
-                      {clsName}
-                    </span>
-                    <span className="text-white font-semibold">{pct}%</span>
-                  </div>
-                  <div className="w-full bg-[#101827] h-2 rounded-full overflow-hidden border border-[#1E2E48]">
-                    <div
-                      className={`h-full transition-all duration-300 ${
-                        clsName.includes('POTHOLE')
-                          ? 'bg-[#FF5364]'
-                          : clsName.includes('ROUGH')
-                          ? 'bg-[#FFB547]'
-                          : 'bg-[#10B981]'
-                      }`}
-                      style={{ width: `${pct}%` }}
-                    />
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[#5A6B82]">Dataset Label</span>
+                <span className="font-mono text-[#253247]">
+                  {groundTruth || '—'}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center py-1">
+                <span className="text-[#5A6B82]">Prediction Match</span>
+                <span
+                  className={`text-[11px] font-medium px-2 py-0.5 rounded ${
+                    isMatch
+                      ? 'bg-[#E8F5E9] text-[#2E7D32]'
+                      : 'bg-[#FFF8E1] text-[#B78103]'
+                  }`}
+                >
+                  {isMatch ? 'Matches Ground Truth' : 'Discrepancy / Holdout'}
+                </span>
+              </div>
+            </div>
+
+            {/* Numerical DSP Measurements */}
+            <div className="pt-3 border-t border-[#E2E6EC]">
+              <div className="text-xs font-semibold text-[#8492A6] uppercase tracking-wide mb-2.5">
+                Vibration Measurements
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+                  <div className="text-[#8492A6] text-[11px]">RMS Energy</div>
+                  <div className="font-mono font-semibold text-[#253247] mt-0.5">
+                    {signalData ? `${signalData.metrics.rms.toFixed(3)} g` : '—'}
                   </div>
                 </div>
-              );
-            })}
+
+                <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+                  <div className="text-[#8492A6] text-[11px]">Peak Value</div>
+                  <div className="font-mono font-semibold text-[#253247] mt-0.5">
+                    {signalData ? `${signalData.metrics.peak.toFixed(3)} g` : '—'}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+                  <div className="text-[#8492A6] text-[11px]">Crest Factor</div>
+                  <div className="font-mono font-semibold text-[#253247] mt-0.5">
+                    {signalData ? signalData.metrics.crest_factor.toFixed(2) : '—'}
+                  </div>
+                </div>
+
+                <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+                  <div className="text-[#8492A6] text-[11px]">Peak-to-Peak</div>
+                  <div className="font-mono font-semibold text-[#253247] mt-0.5">
+                    {signalData ? `${signalData.metrics.p2p.toFixed(3)} g` : '—'}
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
-      )}
+      </div>
     </div>
   );
 };

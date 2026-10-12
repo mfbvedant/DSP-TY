@@ -19,12 +19,12 @@ export function App() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-[#080D18] text-[#F4F7FB] flex flex-col font-['Inter']">
-      {/* Top Navbar */}
+    <div className="min-h-screen bg-[#F7F8FA] text-[#253247] flex flex-col">
+      {/* Clean Header */}
       <Navbar activeTab={activeTab} setActiveTab={setActiveTab} status={status} />
 
       {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 pt-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
         {activeTab === 'overview' && (
           <OverviewPage onNavigate={(tab) => setActiveTab(tab)} status={status} />
         )}
@@ -35,17 +35,16 @@ export function App() {
         {activeTab === 'about' && <AboutPage />}
       </main>
 
-      {/* Footer */}
-      <footer className="border-t border-[#1E2E48] bg-[#0A0E1A] py-6 text-xs text-[#95A4BA] font-mono">
-        <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[#00D4FF] font-bold">RoadSense AI</span>
-            <span>// Third-Year Electronics & Telecommunication DSP Mini-Project</span>
+      {/* Clean Footer */}
+      <footer className="border-t border-[#E2E6EC] bg-white py-4 text-xs text-[#5A6B82]">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+          <div>
+            <span className="font-semibold text-[#253247]">RoadSense AI</span> — Third-Year Electronics & Telecommunication Engineering DSP Project
           </div>
-          <div className="flex items-center gap-4 text-[11px]">
-            <span>FastAPI Backend :8000</span>
-            <span>React + Vite :3000</span>
-            <span className="text-[#10B981]">● Systems Nominal</span>
+          <div className="flex items-center gap-4 text-[11px] text-[#8492A6]">
+            <span>FastAPI Server :8000</span>
+            <span>React Production Client</span>
+            <span>100 Hz IMU Pipeline</span>
           </div>
         </div>
       </footer>

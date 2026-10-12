@@ -357,20 +357,20 @@ roadsense-ai/
     ├── dist/                      # COMPILED PRODUCTION SPA BUNDLE
     └── src/
         ├── main.tsx               # React application root mount
-        ├── App.tsx                # Page routing and navigation controller
-        ├── index.css              # Tailwind v4 theme, fonts, animations, cyber-styling
+        ├── App.tsx                # Page routing and clean layout wrapper
+        ├── index.css              # Clean light engineering design tokens (#F7F8FA, #253247, #E2E6EC, #5579A8)
         ├── api.ts                 # Typed fetch client connecting to FastAPI endpoints
         ├── components/
-        │   ├── Navbar.tsx         # Cyber-telemetry header navigation
-        │   ├── OscilloscopeCanvas.tsx  # 60 FPS HTML5 Canvas signal waveform visualizer
-        │   └── FFTCanvas.tsx      # 60 FPS HTML5 Canvas FFT spectral visualizer
+        │   ├── Navbar.tsx         # Clean header with compact navigation and status indicator
+        │   ├── OscilloscopeCanvas.tsx  # Light scientific canvas signal waveform visualizer
+        │   └── FFTCanvas.tsx      # Light scientific canvas FFT spectral visualizer
         └── pages/
-            ├── OverviewPage.tsx   # Dashboard overview and pipeline diagram
-            ├── MonitoringPage.tsx # Live road monitoring cockpit
-            ├── DSPLabPage.tsx     # Interactive FIR/IIR digital filter lab
-            ├── FFTAnalyzerPage.tsx# Windowed FFT spectral lab
-            ├── ModelEvaluationPage.tsx # ML metrics, retrain trigger, feature table
-            └── AboutPage.tsx      # Academic documentation & viva questions
+            ├── OverviewPage.tsx   # Clean road condition analysis dashboard and metrics
+            ├── MonitoringPage.tsx # Windowed vibration monitoring & classification
+            ├── DSPLabPage.tsx     # Interactive FIR/IIR filter design & dual waveforms
+            ├── FFTAnalyzerPage.tsx# Windowed FFT spectral lab & resonant signatures
+            ├── ModelEvaluationPage.tsx # ML metrics, retrain trigger, imported model card
+            └── AboutPage.tsx      # Academic documentation, DSP concepts, & synthetic disclosure
 ```
 
 ---
@@ -423,9 +423,9 @@ roadsense-ai/
 | **Imported Model Adapter (`sensor_rf.joblib`)** | Complete and verified | `src/imported_model.py`, `tests/test_imported_model.py` | None; tested and functional |
 | **Classification Evaluation** | Complete and verified | `src/evaluation.py`, `outputs/evaluation_report.csv` | Cross-validation matrix reporting |
 | **FastAPI Backend Server** | Complete and verified | `server.py` | Add WebSocket stream endpoint |
-| **React Cyber-Telemetry Frontend** | Complete and verified | `frontend/src/`, `frontend/dist/` | None |
-| **60 FPS Canvas Oscilloscope** | Complete and verified | `frontend/src/components/OscilloscopeCanvas.tsx` | None |
-| **60 FPS Canvas FFT Visualizer** | Complete and verified | `frontend/src/components/FFTCanvas.tsx` | None |
+| **Clean Light Engineering Frontend** | Complete and verified | `frontend/src/`, `frontend/dist/` | None; calm, scientific design active |
+| **Canvas Oscilloscope Visualizer** | Complete and verified | `frontend/src/components/OscilloscopeCanvas.tsx` | None |
+| **Canvas FFT Spectral Visualizer** | Complete and verified | `frontend/src/components/FFTCanvas.tsx` | None |
 | **Windows Launch Scripts** | Complete and verified | `run_app.bat`, `dev.bat`, `run_roadsense.bat` | None |
 | **Streamlit Removal** | Complete and verified | `app.py` deleted, package uninstalled | None |
 | **Unit Test Suite** | Complete and verified | `tests/` (**58 / 58 tests passing**) | Add end-to-end API integration tests |
@@ -541,6 +541,25 @@ cd frontend && npm run build
 ---
 
 ## N. Latest Session Summary
+
+### Session 3: Frontend Redesign to Clean Minimal Engineering Dashboard (October 12, 2026)
+- **User Request:** Redesign RoadSense AI frontend into a clean, minimal, professional engineering dashboard. Light theme (`#F7F8FA` background, white cards, `#253247` slate text, `#E2E6EC` borders, `#5579A8` blue accent). Semantic colors (`#2E7D32` green, `#B78103` amber, `#C62828` red) reserved strictly for system status / hazard classification. Eliminate neon colors, glowing borders, gradients, scanline animations, and pulsing dots. Replace oversized hero with compact heading "Road Condition Analysis" and one-line description. Focus on vibration signal chart and predictions; move secondary info to dedicated tabs. Keep all 6 sections (Overview, Road Monitoring, DSP Laboratory, FFT Analyzer, Model Evaluation, About Project). Ensure responsiveness, verify with browser inspection, preserve all existing APIs, DSP calculations, and model inference without mock fabrication, pass all 58 tests, compile production bundle, and update `PROJECT_CONTEXT.md`.
+- **Refactored Frontend Modules:**
+  - `frontend/src/index.css`: Replaced dark theme variables with calm, scientific tokens (`--bg-app: #F7F8FA`, `--bg-card: #FFFFFF`, `--text-main: #253247`, `--border-color: #E2E6EC`, `--accent-blue: #5579A8`). Added `.eng-card`, clean status badges, and `.clean-select`.
+  - `frontend/src/components/Navbar.tsx`: Implemented clean white header with compact tab navigation, active indicator, and discreet `100 Hz Online` status dot. Telemetry strip and redundant badges removed.
+  - `frontend/src/components/OscilloscopeCanvas.tsx`: Redesigned canvas with white background (`#FFFFFF`), light grid (`#EEF2F6`), subtle zero-crossing line (`#CBD5E1`), restrained dashed threshold lines (`#B78103` / `#C62828`), and slate-blue trace (`#5579A8`, `shadowBlur = 0`).
+  - `frontend/src/components/FFTCanvas.tsx`: Redesigned canvas with white background, subtle area fill (`rgba(85,121,168,0.12)`), `#5579A8` spectrum line, and muted red peak frequency marker.
+  - `frontend/src/App.tsx`: Clean layout wrapper with max-w-7xl container and crisp footer.
+  - `frontend/src/pages/OverviewPage.tsx`: Compact heading, 4 real backend summary metric cards, live vibration waveform canvas, and real-time prediction card.
+  - `frontend/src/pages/MonitoringPage.tsx`: Clean controls (run selector, channel selector, window duration, pagination slider), large oscilloscope canvas, prediction card, and numerical DSP measurements.
+  - `frontend/src/pages/DSPLabPage.tsx`: Clean filter controls (FIR vs IIR toggle, filter type, cutoff, order), attenuation & RMS metrics strip, dual waveform canvases (raw vs filtered), and filter foundation notes.
+  - `frontend/src/pages/FFTAnalyzerPage.tsx`: Window function selector, 5 spectral metrics cards, light FFT canvas, multi-class spectral signature comparison cards, and Fourier transform principles card.
+  - `frontend/src/pages/ModelEvaluationPage.tsx`: Clean retraining console, GroupKFold benchmark metrics table (Accuracy, Precision, Recall, F1-Score), monospace classification report, imported external model diagnostic card, and data leakage mitigation card.
+  - `frontend/src/pages/AboutPage.tsx`: Academic abstract, 2-DOF quarter-car dynamics card, 6 key DSP concept cards, and amber synthetic physics simulation disclosure.
+- **Verification & Testing:**
+  - `npm run build`: Compiled production bundle with 0 errors (`dist/assets/index-C5B0GQ3G.js` 208.93 kB).
+  - `pytest tests/ -q`: **58 / 58 unit tests passed (100%)**.
+  - Browser inspection via automated browser subagent: Verified all 6 tabs on `http://localhost:8000`, captured full-page screenshots, verified responsive layout, and confirmed clean scientific aesthetic.
 
 ### Session 2: Pretrained Model Inspection & Adapter Pipeline (October 12, 2026)
 - **User Request:** Inspect downloaded `models/sensor_rf.joblib`, identify format, dependencies, expected features, and classes. Refer to original repo documentation, verify schema against road-vibration dataset without assumptions, implement minimal inference and adapter code, integrate into RoadSense AI if compatible or explain incompatibility with lightweight fallback, test without fabricating predictions, and update `PROJECT_CONTEXT.md`.

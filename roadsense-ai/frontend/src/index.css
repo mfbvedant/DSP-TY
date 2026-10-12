@@ -1,121 +1,112 @@
 @import "tailwindcss";
 
 :root {
-  --base-canvas: #080D18;
-  --surface-1: #101827;
-  --surface-2: #141E30;
-  --surface-3: #1C2A42;
-  --border-stroke: #1E2E48;
-  --accent-cyan: #00D4FF;
-  --accent-blue: #477BFF;
-  --accent-amber: #FFB547;
-  --accent-red: #FF5364;
-  --text-primary: #F4F7FB;
-  --text-secondary: #95A4BA;
-  --font-mono: 'JetBrains Mono', monospace;
-  --font-display: 'Space Grotesk', sans-serif;
-  --font-ui: 'Inter', sans-serif;
+  --bg-app: #F7F8FA;
+  --bg-card: #FFFFFF;
+  --text-main: #253247;
+  --text-muted: #5A6B82;
+  --text-subtle: #8492A6;
+  --border-color: #E2E6EC;
+  --accent-blue: #5579A8;
+  --accent-blue-hover: #456691;
+  --accent-blue-subtle: #EDF2F7;
+  --status-green: #2E7D32;
+  --status-amber: #B78103;
+  --status-red: #C62828;
 }
 
 body {
   margin: 0;
   padding: 0;
-  background-color: var(--base-canvas);
-  color: var(--text-primary);
-  font-family: var(--font-ui);
-  overflow-x: hidden;
+  background-color: #F7F8FA;
+  color: #253247;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Custom scrollbar */
+/* Minimal Custom Scrollbar */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
 }
 ::-webkit-scrollbar-track {
-  background: #080D18;
+  background: #F7F8FA;
 }
 ::-webkit-scrollbar-thumb {
-  background: #1E2E48;
+  background: #D1D8E0;
   border-radius: 3px;
 }
 ::-webkit-scrollbar-thumb:hover {
-  background: #00D4FF;
+  background: #B0BCCB;
 }
 
-/* Cyber-Telemetry Components */
-.cockpit-card {
-  background: var(--surface-2);
-  border: 1px solid var(--border-stroke);
+/* Clean Engineering Card */
+.eng-card {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E6EC;
   border-radius: 8px;
   padding: 20px;
-  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
 }
 
-.cockpit-card:hover {
-  border-color: rgba(0, 212, 255, 0.4);
-  box-shadow: 0 4px 24px rgba(0, 212, 255, 0.08);
-}
-
-.hud-pill {
+/* Clean Status Badges */
+.badge-clean {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 4px 10px;
+  gap: 5px;
+  padding: 3px 8px;
   border-radius: 4px;
-  font-family: var(--font-mono);
-  font-size: 0.72rem;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.2;
 }
 
-.pill-cyan {
-  background: rgba(0, 212, 255, 0.1);
-  color: #00D4FF;
-  border: 1px solid rgba(0, 212, 255, 0.35);
+.badge-green {
+  background-color: #E8F5E9;
+  color: #2E7D32;
+  border: 1px solid #C8E6C9;
 }
 
-.pill-amber {
-  background: rgba(255, 181, 71, 0.1);
-  color: #FFB547;
-  border: 1px solid rgba(255, 181, 71, 0.35);
+.badge-amber {
+  background-color: #FFF8E1;
+  color: #B78103;
+  border: 1px solid #FFE082;
 }
 
-.pill-red {
-  background: rgba(255, 83, 100, 0.12);
-  color: #FF5364;
-  border: 1px solid rgba(255, 83, 100, 0.4);
+.badge-red {
+  background-color: #FFEBEE;
+  color: #C62828;
+  border: 1px solid #FFCDD2;
 }
 
-.pill-green {
-  background: rgba(16, 185, 129, 0.12);
-  color: #10B981;
-  border: 1px solid rgba(16, 185, 129, 0.35);
+.badge-blue {
+  background-color: #EDF2F7;
+  color: #5579A8;
+  border: 1px solid #D0DCEB;
 }
 
-/* Laser Scanline Animation */
-@keyframes scanline {
-  0% { top: 0%; opacity: 0; }
-  15% { opacity: 1; }
-  85% { opacity: 1; }
-  100% { top: 100%; opacity: 0; }
+.badge-neutral {
+  background-color: #F1F4F8;
+  color: #5A6B82;
+  border: 1px solid #E2E6EC;
 }
 
-.scanline-effect {
-  position: absolute;
-  top: 0; left: 0; right: 0;
-  height: 2px;
-  background: linear-gradient(90deg, transparent 0%, #00D4FF 50%, transparent 100%);
-  box-shadow: 0 0 16px #00D4FF;
-  animation: scanline 4s linear infinite;
-  pointer-events: none;
+/* Clean form inputs */
+.clean-select,
+.clean-input {
+  background-color: #FFFFFF;
+  border: 1px solid #E2E6EC;
+  color: #253247;
+  border-radius: 6px;
+  padding: 6px 12px;
+  font-size: 0.8125rem;
+  transition: border-color 0.15s ease-in-out;
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; transform: scale(1); }
-  50% { opacity: 0.3; transform: scale(0.85); }
-}
-
-.pulse-dot-anim {
-  animation: pulse-dot 2s infinite ease-in-out;
+.clean-select:focus,
+.clean-input:focus {
+  outline: none;
+  border-color: #5579A8;
+  box-shadow: 0 0 0 2px rgba(85, 121, 168, 0.15);
 }
