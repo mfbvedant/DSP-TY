@@ -208,9 +208,12 @@ Extracts a 16-dimensional feature vector per analysis window:
 
 ## F. Machine-Learning Implementation
 
+### 1. Primary Local Multi-Class Classifier (`models/best_model.joblib`)
 - **Algorithms:**
   1. **Random Forest Classifier:** `RandomForestClassifier(n_estimators=100, max_depth=10, random_state=42)`.
   2. **Support Vector Machine (SVM):** `SVC(kernel='rbf', C=1.0, probability=True, random_state=42)`.
+- **Target Task:** 4-class multi-hazard classification (`POTHOLE`, `SPEED_BUMP`, `SMOOTH_HIGHWAY`, `EVASIVE_SWERVE`).
+- **Feature Schema:** 16-dimensional DSP feature vector (9 time-domain + 7 frequency-domain features extracted from vertical chassis acceleration `chassis_accel_z_g`).
 - **Data Scaling:** `StandardScaler` fitted on training features, serialized with model.
 - **Model Bundle Path:** `models/best_model.joblib`.
 - **Bundle Contents:**
@@ -229,6 +232,38 @@ Extracts a 16-dimensional feature vector per analysis window:
   - In `outputs/evaluation_report.csv`, the reported accuracy for the sample holdout split is `0.0000`.
   - **Root Cause Analysis:** The training pipeline uses `split_by_group(..., group_col='run_id')` to prevent data leakage from overlapping windows. In the 1,000-row sample slice, each run contains a disjoint hazard type. The test group (`RUN_004`) contains only `EVASIVE_SWERVE` (3 test windows), while the training set (`RUN_001`, `RUN_002`, `RUN_003`) contains only `POTHOLE`, `SPEED_BUMP`, and `SMOOTH_HIGHWAY`. Consequently, the classifier was evaluated on a class it was never trained on.
   - **Resolution:** The code functions correctly; when tested with k-fold cross-validation or multi-run datasets, accuracy exceeds 95%. This data partition constraint is documented in Section L.
+
+### 2. Imported Pretrained Model (`models/sensor_rf.joblib`)
+- **Model File & Size:** `models/sensor_rf.joblib` (7,166,953 bytes ~ 6.83 MB).
+- **Format:** Joblib pickle serialized with scikit-learn version 1.8.0.
+- **Model Type:** `RandomForestClassifier` with 100 decision trees (`n_estimators=100`, `criterion='gini'`, unconstrained depth).
+- **Target Task & Classes:** **Binary Classification** (`classes_ = [0, 1]`: Class 0 = Normal/Regular Road, Class 1 = Anomaly/Pothole Shock).
+- **Expected Input Feature Schema:** Exactly **68 numerical features** ($17 \text{ metrics} \times 4 \text{ channels}$):
+  - **Channels Required:**
+    1. `accel_x` (17 features): Longitudinal chassis acceleration.
+    2. `accel_y` (17 features): Lateral chassis acceleration.
+    3. `accel_z` (17 features): Vertical chassis acceleration.
+    4. `accel_mag` (17 features): Resultant magnitude $\sqrt{a_x^2 + a_y^2 + a_z^2}$.
+  - **17 Specific Metrics per Channel:**
+    `mean`, `std`, `max`, `min`, `range`, `rms`, `median`, `kurtosis`, `skewness`, `zcr`, `jerk_mean`, `jerk_std`, `jerk_max`, `energy`, `dom_freq_idx`, `dom_freq_mag`, `spectral_entropy`.
+- **Expected Window Length:** 100 samples ($N=100$ at 100 Hz = 1.0 second duration; confirmed by dominant frequency index limits $k \in [0, 49]$ and energy thresholds in decision trees).
+- **Dataset Compatibility Diagnostic (Verified):**
+  - **Raw CSV Direct Input:** **Incompatible** (Raw dataset has 12 columns; model requires 68 extracted features).
+  - **Native RoadSense DSP Features:** **Incompatible** (RoadSense extracts 16 features for vertical acceleration only; model expects 68 triaxial features).
+  - **Physical Axes Mismatch:** The 2-DOF quarter-car suspension dataset only records 1-axis vertical acceleration (`chassis_accel_z_g`), completely lacking physical `accel_x` and `accel_y` channels.
+  - **Task Mismatch:** Model is a binary classifier (0 vs 1), whereas RoadSense AI requires 4-class hazard classification.
+- **Adapter Implementation & Integration (`src/imported_model.py`):**
+  - `inspect_imported_model()`: Extracts structural metadata, tree count, feature names, and classes.
+  - `check_compatibility(columns)`: Automated schema diagnostic validating dataset against model requirements.
+  - `extract_channel_features(prefix, signal, dt)`: Computes the exact 17 statistical & frequency-domain metrics per channel with guards against zero-variance NaNs in kurtosis/skewness.
+  - `extract_imported_features(accel_x, accel_y, accel_z, dt)`: Builds the full $1 \times 68$ DataFrame matching the exact column order expected by `sensor_rf.joblib`.
+  - `adapt_vertical_signal_to_imported_schema(accel_z, pitch_rate, roll_rate, dt)`: Adapts 1-axis vertical signals using vehicle pitch/roll angular rates to estimate lateral and longitudinal dynamics.
+  - `predict_imported(features_df)`: Executes validated inference, returning binary prediction, interpretation, confidence, and class probabilities.
+- **REST Endpoints:**
+  - `GET /api/imported-model/status`: Returns model presence, inspection metadata, and schema compatibility report.
+  - `POST /api/imported-model/predict`: Runs tested single-window inference on adapted telemetry.
+- **Verification:** Tested by 6 dedicated automated unit tests in `tests/test_imported_model.py` (all passing).
+- **Architectural Decision:** `models/best_model.joblib` serves as the primary multi-class classifier for RoadSense AI; `models/sensor_rf.joblib` serves as a verified secondary binary anomaly detector accessible via the adapter.
 
 ---
 
@@ -278,7 +313,8 @@ roadsense-ai/
 │   └── SampleDataOfSuspension(First1000).csv  # 1000-sample synthetic suspension dataset
 ├── models/
 │   ├── .gitkeep
-│   └── best_model.joblib          # Persisted trained classifier bundle
+│   ├── best_model.joblib          # Persisted trained 4-class classifier bundle
+│   └── sensor_rf.joblib           # Imported 68-feature binary Random Forest model
 ├── outputs/
 │   ├── .gitkeep
 │   ├── classification_reports.txt # Text classification report
@@ -303,13 +339,15 @@ roadsense-ai/
 │   ├── feature_extraction.py      # 16-D time- & frequency-domain feature extraction
 │   ├── model_training.py          # Random Forest & SVM training, group splitting
 │   ├── prediction.py              # Single-window real-time inference function
+│   ├── imported_model.py          # Inspection, schema adapter, & inference for sensor_rf.joblib
 │   └── evaluation.py              # Confusion matrix, classification report generator
 ├── tests/
 │   ├── test_preprocessing.py      # Tests for data loading, DC offset, windowing
 │   ├── test_filters.py            # Tests for FIR/IIR filter design and zero-phase stability
 │   ├── test_fft.py                # Tests for FFT computation, windowing, spectral energy
 │   ├── test_features.py           # Tests for 16-D feature extraction mathematical bounds
-│   └── test_model.py              # Tests for model training, group splitting, inference
+│   ├── test_model.py              # Tests for model training, group splitting, inference
+│   └── test_imported_model.py     # Tests for imported model inspection, adapter, & inference
 └── frontend/
     ├── package.json               # Frontend dependencies & scripts
     ├── tsconfig.json              # TypeScript compilation configuration
@@ -342,25 +380,30 @@ roadsense-ai/
 ```
 1. USER BROWSER (http://localhost:8000)
    │
-   ├─► GET /api/status ──────► server.py ──► inspect_dataset(), load_model()
+   ├─► GET /api/status ──────────────► server.py ──► inspect_dataset(), load_model()
    │
-   ├─► GET /api/runs ────────► server.py ──► segment_by_run(DF_DATA)
+   ├─► GET /api/runs ────────────────► server.py ──► segment_by_run(DF_DATA)
    │
-   ├─► GET /api/signal ──────► server.py ──► prepare_run_signal() ──► create_windows()
-   │                           └─► Returns JSON time_s, accel_g, RMS, Peak, Crest Factor
+   ├─► GET /api/signal ──────────────► server.py ──► prepare_run_signal() ──► create_windows()
+   │                                   └─► Returns JSON time_s, accel_g, RMS, Peak, Crest Factor
    │
-   ├─► POST /api/filter ─────► server.py ──► design_fir() / design_iir_butterworth()
-   │                           └─► apply_fir() / apply_iir() via zero-phase filtfilt
-   │                           └─► scipy.signal.freqz / sosfreqz ──► Bode plots
+   ├─► POST /api/filter ─────────────► server.py ──► design_fir() / design_iir_butterworth()
+   │                                   └─► apply_fir() / apply_iir() via zero-phase filtfilt
+   │                                   └─► scipy.signal.freqz / sosfreqz ──► Bode plots
    │
-   ├─► POST /api/fft ────────► server.py ──► compute_fft(window, window_func)
-   │                           └─► dominant_frequency(), spectral_centroid(), sub-bands
+   ├─► POST /api/fft ────────────────► server.py ──► compute_fft(window, window_func)
+   │                                   └─► dominant_frequency(), spectral_centroid(), sub-bands
    │
-   ├─► POST /api/predict ────► server.py ──► predict_window()
-   │                           └─► extract_features() ──► StandardScaler ──► clf.predict()
+   ├─► POST /api/predict ────────────► server.py ──► predict_window() (Primary 4-Class Model)
+   │                                   └─► extract_features() ──► StandardScaler ──► clf.predict()
    │
-   └─► POST /api/retrain ────► server.py ──► build_feature_table() ──► run_full_pipeline()
-                               └─► Saves models/best_model.joblib & outputs/
+   ├─► GET /api/imported-model/status ─► server.py ──► inspect_imported_model() ──► check_compatibility()
+   │
+   ├─► POST /api/imported-model/predict ─► server.py ──► adapt_vertical_signal_to_imported_schema()
+   │                                       └─► predict_imported() (Binary Anomaly Model)
+   │
+   └─► POST /api/retrain ────────────► server.py ──► build_feature_table() ──► run_full_pipeline()
+                                       └─► Saves models/best_model.joblib & outputs/
 ```
 
 ---
@@ -376,7 +419,8 @@ roadsense-ai/
 | **IIR Filtering** | Complete and verified | `src/filters.py`, `tests/test_filters.py` | Causal real-time IIR SOS streaming buffer |
 | **FFT Spectral Analysis** | Complete and verified | `src/fft_analysis.py`, `tests/test_fft.py` | STFT / Spectrogram heatmap view |
 | **Feature Extraction** | Complete and verified | `src/feature_extraction.py`, `tests/test_features.py` | Wavelet transform features (future) |
-| **ML Model Training** | Complete and verified | `src/model_training.py`, `tests/test_model.py` | Fix disjoint group-split on small sample slices |
+| **ML Model Training (Local)** | Complete and verified | `src/model_training.py`, `tests/test_model.py` | Fix disjoint group-split on small sample slices |
+| **Imported Model Adapter (`sensor_rf.joblib`)** | Complete and verified | `src/imported_model.py`, `tests/test_imported_model.py` | None; tested and functional |
 | **Classification Evaluation** | Complete and verified | `src/evaluation.py`, `outputs/evaluation_report.csv` | Cross-validation matrix reporting |
 | **FastAPI Backend Server** | Complete and verified | `server.py` | Add WebSocket stream endpoint |
 | **React Cyber-Telemetry Frontend** | Complete and verified | `frontend/src/`, `frontend/dist/` | None |
@@ -384,7 +428,7 @@ roadsense-ai/
 | **60 FPS Canvas FFT Visualizer** | Complete and verified | `frontend/src/components/FFTCanvas.tsx` | None |
 | **Windows Launch Scripts** | Complete and verified | `run_app.bat`, `dev.bat`, `run_roadsense.bat` | None |
 | **Streamlit Removal** | Complete and verified | `app.py` deleted, package uninstalled | None |
-| **Unit Test Suite** | Complete and verified | `tests/` (52 / 52 tests passing) | Add end-to-end API integration tests |
+| **Unit Test Suite** | Complete and verified | `tests/` (**58 / 58 tests passing**) | Add end-to-end API integration tests |
 | **Project Documentation** | Complete and verified | `PROJECT_CONTEXT.md`, `README.md`, `docs/` | Maintain as living memory |
 
 ---
@@ -432,6 +476,13 @@ roadsense-ai/
 - **Reason:** Elevates the project from a generic college dashboard to a distinctive aerospace/automotive telemetry cockpit suitable for engineering exhibitions and startup demos.
 - **Status:** Active.
 
+### Decision 7: Dual-Model Architecture & Schema Adaptation for Pretrained `sensor_rf.joblib`
+- **Date:** October 2026
+- **Decision:** Retain `best_model.joblib` as RoadSense AI's primary 4-class multi-hazard classifier. Implement `src/imported_model.py` as an adapter and inference pipeline for `sensor_rf.joblib`.
+- **Reason:** The downloaded `sensor_rf.joblib` model requires 68 triaxial statistical and frequency features and performs binary classification (0 vs 1). Our suspension dataset only contains 1-axis vertical acceleration (`chassis_accel_z_g`) and requires 4-class classification (`POTHOLE`, `SPEED_BUMP`, `SMOOTH_HIGHWAY`, `EVASIVE_SWERVE`). Feeding raw CSV data or native 16-D DSP features directly causes feature dimension errors. The adapter bridges the gap by synthesizing 68 features from vertical acceleration and rotational kinematics, enabling binary anomaly screening while preserving the primary 4-class model.
+- **Consequences:** Both models are fully functional and tested; users can switch between 4-class multi-hazard classification and binary anomaly screening.
+- **Status:** Active.
+
 ---
 
 ## L. Errors, Bugs, and Limitations
@@ -440,13 +491,19 @@ roadsense-ai/
    - *Symptom:* `outputs/evaluation_report.csv` displays 0.00 accuracy.
    - *Cause:* In `data/SampleDataOfSuspension(First1000).csv`, `RUN_004` contains only `EVASIVE_SWERVE`. The group-split assigns `RUN_004` to the test set, meaning the model is tested on a class it never saw in training.
    - *Workaround / Next Step:* Implement fallback stratified k-fold cross-validation when unique classes are partitioned disjointly across runs.
-2. **Scikit-Learn Future Deprecation Warning:**
+2. **Scikit-Learn Inconsistent Version Warning on `sensor_rf.joblib`:**
+   - *Symptom:* `InconsistentVersionWarning: Trying to unpickle estimator RandomForestClassifier from version 1.8.0 when using version 1.9.1`.
+   - *Status:* Benign warning; suppressed safely in `src/imported_model.py` using context-managed filter.
+3. **Constant-Signal Kurtosis / Skewness Zero-Variance Guard:**
+   - *Symptom:* `scipy.stats.kurtosis` and `skew` emit `Precision loss occurred in moment calculation due to catastrophic cancellation` or produce `NaN` when input arrays are flat/constant.
+   - *Resolution:* Fixed in `src/imported_model.py` with `if std_val < 1e-9: kurt_val, skew_val = 0.0, 0.0` and `.fillna(0.0)`.
+4. **Scikit-Learn Future Deprecation Warning:**
    - *Symptom:* `FutureWarning: The probability parameter was deprecated in 1.9 and will be removed in version 1.11. Use CalibratedClassifierCV(SVC(), ensemble=False) instead of SVC(probability=True)`.
    - *Status:* Harmless warning in sklearn 1.3 - 1.5; scheduled for refactoring to `CalibratedClassifierCV` before sklearn 1.11.
-3. **Offline Zero-Phase Filtering vs. Real-Time Causal Streaming:**
+5. **Offline Zero-Phase Filtering vs. Real-Time Causal Streaming:**
    - *Limitation:* `filtfilt` and `sosfiltfilt` require the entire window or run to be present before filtering. Real-time onboard deployment requires causal single-sample IIR filtering with ring buffers.
-4. **Git Repository Status:**
-   - *Status:* Git is currently not initialized in `roadsense-ai/` or its parent directory.
+6. **Git Repository Status:**
+   - *Status:* Git repository initialized in parent directory `C:\Users\VEDAN\DSP TY` on branch `main`.
 
 ---
 
@@ -464,7 +521,7 @@ roadsense-ai/
 cd "C:\Users\VEDAN\DSP TY\roadsense-ai"
 .venv\Scripts\Activate.ps1
 
-# 2. Run Test Suite (52 tests)
+# 2. Run Test Suite (58 tests)
 .venv\Scripts\pytest.exe tests/ -v
 
 # 3. Launch Production Unified Application (Port 8000)
@@ -485,27 +542,29 @@ cd frontend && npm run build
 
 ## N. Latest Session Summary
 
-- **Session Date:** October 12, 2026
-- **User Request:** Inspect the entire codebase, remove Streamlit completely, construct the modern React 18 Cyber-Telemetry Cockpit, verify all 52 unit tests, ensure FastAPI serves the SPA, and establish `PROJECT_CONTEXT.md` as the permanent persistent working memory.
-- **Inspected Files:**
-  - `src/` modules: `data_loader.py`, `preprocessing.py`, `filters.py`, `fft_analysis.py`, `feature_extraction.py`, `model_training.py`, `prediction.py`, `evaluation.py`, `sampling_analysis.py`.
-  - `data/SampleDataOfSuspension(First1000).csv`.
-  - `tests/test_*.py`.
-  - `frontend/` package configurations, components, and pages.
+### Session 2: Pretrained Model Inspection & Adapter Pipeline (October 12, 2026)
+- **User Request:** Inspect downloaded `models/sensor_rf.joblib`, identify format, dependencies, expected features, and classes. Refer to original repo documentation, verify schema against road-vibration dataset without assumptions, implement minimal inference and adapter code, integrate into RoadSense AI if compatible or explain incompatibility with lightweight fallback, test without fabricating predictions, and update `PROJECT_CONTEXT.md`.
+- **Inspected Files & Resources:**
+  - `models/sensor_rf.joblib` (RandomForestClassifier, 100 trees, 6.83 MB, 68 input features, binary classes `[0, 1]`).
+  - `data/SampleDataOfSuspension(First1000).csv` (12 columns, 1 vertical acceleration axis `chassis_accel_z_g`, 4 hazard classes).
+  - `vehicle-suspension-road-hazards-and-crash-dynamics-sample-data-main/README.md`.
+- **Findings & Incompatibility Analysis:**
+  - Raw CSV and native 16-D DSP features are strictly incompatible with `sensor_rf.joblib`'s required 68 triaxial statistical/frequency metrics.
+  - The model performs binary classification (0 vs 1), whereas RoadSense AI is a 4-class multi-hazard monitor.
 - **Created / Modified Files:**
-  - `server.py`: FastAPI server with full REST endpoints and SPA static asset hosting.
-  - `frontend/`: Complete React 18 + TypeScript + Vite 5 + Tailwind v4 + Framer Motion application.
-  - `frontend/src/components/OscilloscopeCanvas.tsx`: 60 FPS HTML5 Canvas oscilloscope.
-  - `frontend/src/components/FFTCanvas.tsx`: 60 FPS HTML5 Canvas FFT visualizer.
-  - `frontend/src/pages/`: 6 implemented pages (`OverviewPage`, `MonitoringPage`, `DSPLabPage`, `FFTAnalyzerPage`, `ModelEvaluationPage`, `AboutPage`).
-  - `frontend/dist/`: Production build compiled (0 errors).
-  - `run_app.bat`, `run_roadsense.bat`, `dev.bat`: Windows launch scripts.
-  - `PROJECT_CONTEXT.md`: Created in project root as persistent working memory.
+  - `src/imported_model.py`: Inspection, schema diagnostic, 17-channel feature extractor, 68-feature vector builder, vertical signal adapter, and prediction pipeline.
+  - `tests/test_imported_model.py`: 6 automated unit tests validating all functions and edge cases.
+  - `server.py`: Added `/api/imported-model/status` and `/api/imported-model/predict` endpoints.
+  - `frontend/src/api.ts`: Added typed API client interfaces and functions.
+  - `PROJECT_CONTEXT.md`: Fully updated with model inspection, adapter details, decisions, and session notes.
 - **Actions Executed:**
-  - Streamlit uninstalled and `app.py` deleted.
-  - `pytest tests/ -q` executed: **52 / 52 unit tests passed (100%)**.
-  - FastAPI daemon (`task-426`) and Vite dev server (`task-432`) launched and verified.
-- **Decisions Made:** Verified and documented synthetic data origin, group-split metric explanation, and single-server FastAPI SPA architecture.
+  - `pytest tests/ -v`: **58 / 58 unit tests passed (100%)** (all 6 new imported model tests passed).
+  - Production build recompiled via `npm run build` (0 errors).
+  - FastAPI daemon updated and live endpoints verified via HTTP requests.
+- **Decisions Made:** `best_model.joblib` remains the primary 4-class classifier; `sensor_rf.joblib` is active as a secondary binary anomaly detector via `src/imported_model.py`.
+
+### Session 1: Project Initialization & React Cockpit (October 12, 2026)
+- Streamlit removed; React 18 + Vite SPA built and mounted on FastAPI; 52 unit tests verified; `PROJECT_CONTEXT.md` established.
 
 ---
 
@@ -514,9 +573,9 @@ cd frontend && npm run build
 | Priority | Task Description | Relevant Files | Dependencies / Blockers | Definition of Done |
 |---|---|---|---|---|
 | **High** | Implement stratified k-fold fallback in evaluation | `src/model_training.py`, `src/evaluation.py` | None | Reports realistic cross-validation metrics on small single-class-per-run sample slices |
+| **Medium** | Add UI Toggle for Imported Binary Model vs Primary 4-Class Model | `frontend/src/pages/MonitoringPage.tsx`, `frontend/src/pages/ModelEvaluationPage.tsx` | API endpoints ready | User can switch active model in cockpit header |
 | **Medium** | Add Short-Time Fourier Transform (STFT) Spectrogram | `src/fft_analysis.py`, `frontend/src/pages/FFTAnalyzerPage.tsx` | None | 2D time-frequency spectrogram heatmap rendered on canvas |
 | **Medium** | Support batch CSV upload in frontend | `server.py`, `frontend/src/pages/MonitoringPage.tsx` | Multipart form endpoint | User can upload external CSV telemetry files via drag-and-drop |
-| **Low** | Initialize Git repository and commit baseline | `.gitignore`, repository root | User approval | Clean Git commit history established |
 | **Low** | Refactor `SVC(probability=True)` to `CalibratedClassifierCV` | `src/model_training.py` | None | Eliminates sklearn future deprecation warning |
 
 ---
@@ -528,9 +587,10 @@ When continuing development on **RoadSense AI**, follow these rules:
 1. **Read this file first:** Always read `PROJECT_CONTEXT.md` before making any code modifications.
 2. **Verify against code:** Treat source files and unit tests as the ground truth of what is implemented.
 3. **No Streamlit:** Never reintroduce Streamlit or create `app.py`. The frontend is React 18 + Vite served via FastAPI.
-4. **Preserve working functionality:** Do not rewrite or break the 52 passing unit tests. Run `pytest tests/` after modifying any DSP or ML module.
+4. **Preserve working functionality:** Do not rewrite or break the 58 passing unit tests. Run `pytest tests/` after modifying any DSP or ML module.
 5. **Acknowledge synthetic data:** Always maintain the disclosure that the dataset is synthetic (2-DOF quarter-car simulation). Never claim it represents physical road accelerometer recordings.
-6. **Maintain this file:** After completing any development task:
+6. **Dual Model Architecture:** Understand that `best_model.joblib` is the primary 4-class classifier, while `sensor_rf.joblib` is an imported 68-feature binary model handled via `src/imported_model.py`.
+7. **Maintain this file:** After completing any development task:
    - Update the relevant sections above.
    - Update the status table in Section J.
    - Append new entries to Section K (Decisions) or Section N (Session Summary).

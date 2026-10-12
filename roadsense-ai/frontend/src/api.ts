@@ -188,3 +188,64 @@ export async function retrainModel(params: {
   if (!res.ok) throw new Error('Retraining failed');
   return res.json();
 }
+
+export interface ImportedModelStatusResponse {
+  present: boolean;
+  metadata: {
+    status: string;
+    model_file: string;
+    model_path: string;
+    file_size_mb: number;
+    model_class: string;
+    n_estimators: number;
+    n_features_in: number;
+    feature_names: string[];
+    classes: number[];
+    n_classes: number;
+    classification_type: string;
+  };
+  compatibility: {
+    compatible_raw: boolean;
+    compatible_with_adapter: boolean;
+    expected_feature_count: number;
+    raw_column_count: number;
+    has_triaxial_channels: boolean;
+    missing_axes: string[];
+    reasons: string[];
+    recommended_action: string;
+  };
+}
+
+export interface ImportedModelPredictResponse {
+  model_name: string;
+  predicted_class: number;
+  interpretation: string;
+  confidence: number;
+  probabilities: number[];
+  classes: number[];
+  run_id: string;
+  window_idx: number;
+  ground_truth: string;
+}
+
+export async function fetchImportedModelStatus(): Promise<ImportedModelStatusResponse> {
+  const res = await fetch(`${API_BASE}/imported-model/status`);
+  if (!res.ok) throw new Error('Failed to fetch imported model status');
+  return res.json();
+}
+
+export async function predictImportedModel(params: {
+  run_id: string;
+  window_idx: number;
+  window_duration_s: number;
+  channel?: string;
+}): Promise<ImportedModelPredictResponse> {
+  const res = await fetch(`${API_BASE}/imported-model/predict`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(params),
+  });
+  if (!res.ok) throw new Error('Imported model prediction failed');
+  return res.json();
+}
+

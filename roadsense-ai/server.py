@@ -46,6 +46,11 @@ from src.model_training import (
 )
 from src.prediction import predict_window
 from src.evaluation import save_evaluation_report, save_classification_reports
+from src.imported_model import (
+    is_imported_model_present, inspect_imported_model,
+    check_compatibility, adapt_vertical_signal_to_imported_schema,
+    predict_imported,
+)
 
 app = FastAPI(title="RoadSense AI API", version="2.0.0")
 
@@ -120,6 +125,7 @@ def get_status():
         "simulation_runs": list(RUNS_DATA.keys()),
         "hazard_classes": sorted(DF_DATA["hazard_type"].unique().tolist()) if DF_DATA is not None else [],
         "model_loaded": model_loaded,
+        "imported_model_present": is_imported_model_present(),
         "available_channels": get_available_accel_columns(DF_DATA) if DF_DATA is not None else [],
     }
 
@@ -370,6 +376,53 @@ def export_file(export_type: str, run_id: Optional[str] = None):
     if not p.exists():
         raise HTTPException(status_code=404, detail="File not found")
     return FileResponse(p, filename=p.name, media_type="text/csv")
+
+
+# ------------------------------------------------------------------ #
+# Imported Pretrained Model Endpoints                                #
+# ------------------------------------------------------------------ #
+@app.get("/api/imported-model/status")
+def get_imported_model_status():
+    metadata = inspect_imported_model()
+    dataset_cols = DF_DATA.columns.tolist() if DF_DATA is not None else []
+    compatibility = check_compatibility(dataset_cols)
+    return {
+        "present": is_imported_model_present(),
+        "metadata": metadata,
+        "compatibility": compatibility,
+    }
+
+
+@app.post("/api/imported-model/predict")
+def predict_with_imported_model(req: PredictRequest):
+    if not is_imported_model_present():
+        raise HTTPException(status_code=404, detail="Imported model sensor_rf.joblib not found")
+
+    if req.run_id not in RUNS_DATA:
+        raise HTTPException(status_code=404, detail="Run not found")
+
+    rdf = RUNS_DATA[req.run_id]
+    t, a, r_fs = prepare_run_signal(rdf, accel_col=req.channel)
+    win_size = max(10, int(r_fs * req.window_duration_s))
+    wins = create_windows(a, win_size, overlap=0.0)
+
+    if req.window_idx >= len(wins):
+        raise HTTPException(status_code=400, detail="Window index out of bounds")
+
+    w_data = wins[req.window_idx]
+    start_idx = req.window_idx * win_size
+    end_idx = min(len(rdf), start_idx + len(w_data))
+
+    pitch_w = rdf["pitch_rate_deg_s"].iloc[start_idx:end_idx].values if "pitch_rate_deg_s" in rdf.columns else None
+    roll_w = rdf["roll_rate_deg_s"].iloc[start_idx:end_idx].values if "roll_rate_deg_s" in rdf.columns else None
+
+    df_feats = adapt_vertical_signal_to_imported_schema(w_data, pitch_rate=pitch_w, roll_rate=roll_w, dt=1.0 / r_fs)
+    res = predict_imported(df_feats)
+    res["run_id"] = req.run_id
+    res["window_idx"] = req.window_idx
+    res["ground_truth"] = rdf["hazard_type"].iloc[0]
+    return res
+
 
 
 # ------------------------------------------------------------------ #
