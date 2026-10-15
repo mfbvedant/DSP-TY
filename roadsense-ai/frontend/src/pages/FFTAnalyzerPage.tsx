@@ -192,17 +192,66 @@ export const FFTAnalyzerPage: React.FC<FFTAnalyzerPageProps> = ({ userSignal }) 
         </div>
       )}
 
-      {/* Technical Explanation */}
-      <div className="eng-card">
-        <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
-          <HelpCircle className="w-4 h-4 text-[#5579A8]" />
-          Discrete Fourier Transform & Spectral Leakage Principles
-        </h3>
-        <p className="text-xs text-[#5A6B82] leading-relaxed">
-          The FFT transforms discrete sampled signals x[n] from the time domain into frequency-domain harmonic coefficients X[k].
-          When rectangular windowing is applied to finite-duration vehicle signals, abrupt truncation creates artificial side-lobes known as <strong>spectral leakage</strong>.
-          Applying bell-shaped tapering windows (e.g. <strong>Hann</strong> or <strong>Blackman</strong>) smoothly scales boundary samples to zero, suppressing false frequency artifacts and isolating vehicle suspension resonance peaks.
-        </p>
+      {/* Diagnostic & Hazard Spectral Identification Guide */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* Windowing Mechanics */}
+        <div className="eng-card">
+          <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
+            <HelpCircle className="w-4 h-4 text-[#5579A8]" />
+            What Causes What in FFT & Window Tapering?
+          </h3>
+          <div className="space-y-2.5 text-xs text-[#5A6B82] leading-relaxed">
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">Spectral Decomposition:</strong>
+              The FFT decomposes acceleration into orthogonal harmonic basis functions:
+              <code className="block mt-1 font-mono text-[11px] text-[#253247]">X[k] = Σ x[n] · w[n] · e^(-j · 2π · k · n / N)</code>
+              Revealing which mechanical resonance modes (chassis bounce, wheel hop, tire impact) are excited.
+            </div>
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">Windowing & Spectral Leakage:</strong>
+              Abruptly truncating a signal (Rectangular window) creates sharp edges in time, producing high sinc side-lobes (-13 dB) that leak artificial energy into adjacent bins. Tapering windows (<strong>Hann</strong>: -31 dB, <strong>Blackman</strong>: -58 dB) smoothly force endpoints to zero, suppressing false leakage.
+            </div>
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">Time-Frequency Uncertainty:</strong>
+              Shorter window (0.25 s) gives high time localization for the instant of impact, but coarse frequency resolution (Δf = 4 Hz). Longer window (1.0 s) gives sharp frequency bins (Δf = 1 Hz) but smears transient events over time.
+            </div>
+          </div>
+        </div>
+
+        {/* How to Determine a Pothole on the FFT Graph */}
+        <div className="eng-card border-l-4 border-l-[#C62828]">
+          <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-[#C62828]" />
+            How to Determine There is a Pothole from the FFT Graph
+          </h3>
+          <div className="space-y-2 text-xs text-[#5A6B82] leading-relaxed">
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+              <div>
+                <strong className="text-[#253247]">Broadband Impulse Response:</strong>
+                A violent tire impact in time approximates an impulse δ(t). In the frequency domain, an impulse has an infinitely wide, flat spectrum (Fourier transform of δ is constant across all frequencies). A pothole causes <strong>energy to surge across ALL frequencies up to the 50 Hz Nyquist limit</strong>.
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+              <div>
+                <strong className="text-[#253247]">Elevated High-Band Energy & Centroid:</strong>
+                High-frequency band power ($20 - 50$ Hz) spikes dramatically. The <strong>Spectral Centroid</strong> shifts upward into the $18 - 28$ Hz range, and the <strong>Spectral Spread</strong> widens ($\sigma_f &gt; 10$ Hz).
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+              <div>
+                <strong className="text-[#253247]">Pothole vs Speed Bump vs Highway in FFT:</strong>
+                <ul className="list-disc list-inside mt-1 space-y-1 text-[#5A6B82]">
+                  <li><span className="text-[#C62828] font-semibold">Pothole:</span> Broadband energy explosion + heavy high-band content ($20–50$ Hz).</li>
+                  <li><span className="text-[#E65100] font-semibold">Speed Bump:</span> Narrow, concentrated peak at low frequency ($1.5–4$ Hz body heave); negligible high-band energy.</li>
+                  <li><span className="text-[#2E7D32] font-semibold">Smooth Highway:</span> Low, flat baseline across all bins with no prominent peaks.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

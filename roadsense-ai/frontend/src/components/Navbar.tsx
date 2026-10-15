@@ -4,6 +4,7 @@ import {
   Activity,
   SlidersHorizontal,
   BarChart3,
+  BookOpen,
   Cpu,
   Info,
 } from 'lucide-react';
@@ -22,6 +23,7 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, status,
     { id: 'monitoring', label: 'Road Monitoring', icon: Activity },
     { id: 'dsp_lab', label: 'DSP Laboratory', icon: SlidersHorizontal },
     { id: 'fft', label: 'FFT Analyzer', icon: BarChart3 },
+    { id: 'theory', label: 'DSP Theory & Guide', icon: BookOpen },
     { id: 'model', label: 'Model Evaluation', icon: Cpu },
     { id: 'about', label: 'About Project', icon: Info },
   ];

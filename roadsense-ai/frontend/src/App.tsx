@@ -7,6 +7,7 @@ import { DSPLabPage } from './pages/DSPLabPage';
 import { FFTAnalyzerPage } from './pages/FFTAnalyzerPage';
 import { ModelEvaluationPage } from './pages/ModelEvaluationPage';
 import { AboutPage } from './pages/AboutPage';
+import { DSPTheoryPage } from './pages/DSPTheoryPage';
 
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('overview');
@@ -36,6 +37,7 @@ export function App() {
         {activeTab === 'monitoring' && <MonitoringPage userSignal={userSignal} />}
         {activeTab === 'dsp_lab' && <DSPLabPage userSignal={userSignal} />}
         {activeTab === 'fft' && <FFTAnalyzerPage userSignal={userSignal} />}
+        {activeTab === 'theory' && <DSPTheoryPage />}
         {activeTab === 'model' && <ModelEvaluationPage />}
         {activeTab === 'about' && <AboutPage />}
       </main>

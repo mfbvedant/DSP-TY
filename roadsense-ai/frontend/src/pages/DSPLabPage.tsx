@@ -250,21 +250,58 @@ export const DSPLabPage: React.FC<DSPLabPageProps> = ({ userSignal }) => {
         </div>
       )}
 
-      {/* DSP Theory Card */}
-      <div className="eng-card">
-        <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
-          <Info className="w-4 h-4 text-[#5579A8]" />
-          Filter Architecture & Signal Integrity Foundations
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs text-[#5A6B82] leading-relaxed">
-          <div>
-            <strong className="text-[#253247]">FIR Linear Phase:</strong> Windowed-sinc impulse response guarantees constant group delay across all frequency components. Pothole peak timings remain strictly unshifted in time.
+      {/* Diagnostic & Hazard Identification Guide */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        {/* LPF vs HPF & FIR Mechanics */}
+        <div className="eng-card">
+          <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
+            <SlidersHorizontal className="w-4 h-4 text-[#5579A8]" />
+            What Changes When Switching Low-Pass vs High-Pass?
+          </h3>
+          <div className="space-y-2.5 text-xs text-[#5A6B82] leading-relaxed">
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">Low-Pass Filter (e.g. Cutoff &lt; 15 Hz):</strong>
+              Preserves slow body heave, suspension rebound, and road slope (0–5 Hz). It filters out tire road-hiss and MEMS sensor noise, but <em>dampens and blurs</em> the sharp transient edge of a pothole impact.
+            </div>
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">High-Pass Filter (e.g. Cutoff &gt; 15 Hz):</strong>
+              Strips away vehicle pitch, roll, and DC gravity ($1g$), flattening baseline motion to zero. This makes the sudden, violent tire-rim strike of a pothole <strong>pop out as an unmistakable, isolated impulse spike</strong>.
+            </div>
+            <div className="p-2.5 rounded bg-[#F7F8FA] border border-[#E2E6EC]">
+              <strong className="text-[#253247] block mb-1">FIR Mechanics (Feedforward Taps):</strong>
+              FIR filters calculate <code>y[n] = Σ b[k] · x[n-k]</code> (for k = 0 to M-1) with no feedback poles. Because the coefficients are symmetric (b[k] = b[M-1-k]), all frequencies travel at identical speeds (linear phase). With zero-phase bidirectional filtering, the pothole impact peak is <strong>100% physically synchronized with time</strong> with zero phase delay.
+            </div>
           </div>
-          <div>
-            <strong className="text-[#253247]">IIR Butterworth (SOS):</strong> Maximally flat passband with zero ripple. Second-Order Sections (SOS) structure avoids coefficient roundoff instability at sharp cutoffs.
-          </div>
-          <div>
-            <strong className="text-[#253247]">Zero-Phase Filtering:</strong> Forward-backward bidirectional filtering cancels all phase distortion, ensuring true physical synchronization with vehicle chassis displacement.
+        </div>
+
+        {/* How to Determine a Pothole on the Filter Graph */}
+        <div className="eng-card border-l-4 border-l-[#C62828]">
+          <h3 className="text-sm font-semibold text-[#253247] mb-2 flex items-center gap-2">
+            <Info className="w-4 h-4 text-[#C62828]" />
+            How to Determine There is a Pothole from the Filter Graph
+          </h3>
+          <div className="space-y-2 text-xs text-[#5A6B82] leading-relaxed">
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">1</span>
+              <div>
+                <strong className="text-[#253247]">Biphasic Shock Waveform:</strong>
+                First, a sudden <em>drop below baseline</em> (free-fall / de-weighting as the tire drops into the void), followed immediately by a sharp <em>positive spike</em> ($+1.5g$ to $+2.5g$) as the rim impacts the opposite lip.
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">2</span>
+              <div>
+                <strong className="text-[#253247]">Elevated Crest Factor (Peak / RMS &gt; 3.5):</strong>
+                Unlike smooth road vibrations where energy is evenly distributed (Crest Factor ~ 1.5–2.5), a pothole concentrates violent energy in a single millisecond impulse, causing a dramatic Crest Factor spike.
+              </div>
+            </div>
+            <div className="flex items-start gap-2">
+              <span className="w-5 h-5 rounded-full bg-[#FFEBEE] text-[#C62828] font-bold flex items-center justify-center shrink-0 text-[10px]">3</span>
+              <div>
+                <strong className="text-[#253247]">Pothole vs Speed Bump in Waveform:</strong>
+                A <em>speed bump</em> begins with a smooth upward positive compression followed by gradual settling. A <em>pothole</em> starts with an abrupt negative dip followed by a violent, high-jerk impact spike.
+              </div>
+            </div>
           </div>
         </div>
       </div>
