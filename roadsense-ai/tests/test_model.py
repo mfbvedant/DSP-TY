@@ -90,14 +90,22 @@ def test_train_svm_and_evaluate():
 
 
 def test_run_full_pipeline_and_predict_window():
+    from src.model_training import MODELS_DIR
     df = _dummy_feature_df()
-    results = run_full_pipeline(df)
+    test_model_name = "test_pipeline_model"
+    results = run_full_pipeline(df, model_name=test_model_name)
     assert "RandomForest" in results
     assert "SVM" in results
     assert "best_model_name" in results
 
     # Test inference using saved bundle
     dummy_signal = np.random.randn(50)
-    pred_res = predict_window(dummy_signal, fs=100.0)
+    pred_res = predict_window(dummy_signal, fs=100.0, model_name=test_model_name)
     assert "predicted_class" in pred_res
     assert pred_res["predicted_class"] in results["label_names"]
+
+    # Clean up test artifact
+    test_artifact = MODELS_DIR / f"{test_model_name}.joblib"
+    if test_artifact.exists():
+        test_artifact.unlink()
+

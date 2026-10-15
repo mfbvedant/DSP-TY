@@ -1,57 +1,52 @@
 import React, { useState, useEffect } from 'react';
 import {
-  Download,
   AlertTriangle,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Activity,
-  Sliders,
+  AlertCircle,
 } from 'lucide-react';
 import {
-  fetchRuns,
-  fetchSignalWindow,
-  predictWindow,
-  RunSummary,
-  SignalWindowResponse,
+  UserSignalData,
+  userSignalWindow,
+  userSignalPredict,
+  UserSignalWindowResponse,
   PredictResponse,
 } from '../api';
 import { OscilloscopeCanvas } from '../components/OscilloscopeCanvas';
 
-export const MonitoringPage: React.FC = () => {
-  const [runs, setRuns] = useState<RunSummary[]>([]);
-  const [selectedRun, setSelectedRun] = useState<string>('');
+interface MonitoringPageProps {
+  userSignal: UserSignalData | null;
+}
+
+export const MonitoringPage: React.FC<MonitoringPageProps> = ({ userSignal }) => {
   const [windowIdx, setWindowIdx] = useState<number>(0);
   const [windowDur, setWindowDur] = useState<number>(0.5);
-  const [channel, setChannel] = useState<string>('chassis_accel_z_g');
 
-  const [signalData, setSignalData] = useState<SignalWindowResponse | null>(null);
-  const [prediction, setPrediction] = useState<PredictResponse | null>(null);
-  const [loading, setLoading] = useState<boolean>(true);
+  const [signalData, setSignalData] = useState<UserSignalWindowResponse | null>(null);
+  const [prediction, setPrediction] = useState<(PredictResponse & { total_windows?: number }) | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Load runs on mount
-  useEffect(() => {
-    fetchRuns()
-      .then((data) => {
-        setRuns(data);
-        if (data.length > 0) setSelectedRun(data[0].run_id);
-      })
-      .catch((err) => setError(err.message));
-  }, []);
 
   // Fetch signal window & prediction when selection changes
   useEffect(() => {
-    if (!selectedRun) return;
+    if (!userSignal) return;
     setLoading(true);
+    setError(null);
 
     Promise.all([
-      fetchSignalWindow(selectedRun, windowIdx, windowDur, channel),
-      predictWindow({
-        run_id: selectedRun,
+      userSignalWindow({
+        signal: userSignal.signal,
+        fs: userSignal.fs,
         window_idx: windowIdx,
         window_duration_s: windowDur,
-        channel,
+      }),
+      userSignalPredict({
+        signal: userSignal.signal,
+        fs: userSignal.fs,
+        window_idx: windowIdx,
+        window_duration_s: windowDur,
       }).catch(() => null),
     ])
       .then(([sig, pred]) => {
@@ -63,23 +58,51 @@ export const MonitoringPage: React.FC = () => {
         setError(err.message);
         setLoading(false);
       });
-  }, [selectedRun, windowIdx, windowDur, channel]);
+  }, [userSignal, windowIdx, windowDur]);
+
+  // No user signal — show guidance
+  if (!userSignal) {
+    return (
+      <div className="space-y-6">
+        <div className="border-b border-[#E2E6EC] pb-4">
+          <h1 className="text-xl sm:text-2xl font-bold text-[#253247] tracking-tight">
+            Road Monitoring
+          </h1>
+          <p className="text-xs text-[#5A6B82] mt-0.5">
+            100 Hz IMU vibration window inspection and supervised road condition classification.
+          </p>
+        </div>
+
+        <div className="eng-card p-8 text-center space-y-3">
+          <AlertCircle className="w-10 h-10 text-[#5579A8] mx-auto" />
+          <h2 className="text-lg font-semibold text-[#253247]">No Signal Data Loaded</h2>
+          <p className="text-sm text-[#5A6B82] max-w-lg mx-auto">
+            Go to the <strong>Overview</strong> page, paste or upload your vibration data, and click <strong>"Analyse Road"</strong>.
+            Once analyzed, your signal data will automatically flow here for windowed monitoring and classification.
+          </p>
+          <div className="pt-2 text-xs text-[#8492A6]">
+            The Road Monitoring page operates on the signal you provide on the main page — no pre-loaded dataset is used.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (error) {
     return (
       <div className="p-8 text-center bg-white rounded-lg border border-[#E2E6EC] shadow-xs">
         <AlertTriangle className="w-8 h-8 text-[#C62828] mx-auto mb-2" />
-        <h3 className="text-[#253247] font-semibold text-base mb-1">Telemetry Signal Error</h3>
+        <h3 className="text-[#253247] font-semibold text-base mb-1">Signal Processing Error</h3>
         <p className="text-sm text-[#5A6B82]">{error}</p>
       </div>
     );
   }
 
-  const currentClass = prediction?.predicted_class || signalData?.hazard_type || 'SMOOTH_HIGHWAY';
-  const groundTruth = signalData?.hazard_type || '';
-  const isMatch = prediction && groundTruth && prediction.predicted_class.toUpperCase() === groundTruth.toUpperCase();
-  const isPothole = currentClass.toUpperCase().includes('POTHOLE');
-  const isSmooth = currentClass.toUpperCase().includes('SMOOTH');
+  const predictedClass = prediction ? prediction.predicted_class : null;
+  const isPothole = predictedClass ? predictedClass.toUpperCase().includes('POTHOLE') : false;
+  const isSmooth = predictedClass ? predictedClass.toUpperCase().includes('SMOOTH') : false;
+
+  const totalWindows = signalData?.total_windows || 1;
 
   return (
     <div className="space-y-6">
@@ -90,59 +113,25 @@ export const MonitoringPage: React.FC = () => {
             Road Monitoring
           </h1>
           <p className="text-xs text-[#5A6B82] mt-0.5">
-            100 Hz IMU vibration window inspection and supervised road condition classification.
+            Windowed vibration inspection and supervised road condition classification on your input signal.
           </p>
         </div>
+      </div>
 
-        <a
-          href={`http://localhost:8000/api/export/signal?run_id=${selectedRun}`}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded border border-[#E2E6EC] bg-white text-xs font-medium text-[#253247] hover:bg-[#F7F8FA] transition-colors self-start sm:self-auto"
-        >
-          <Download className="w-3.5 h-3.5 text-[#5A6B82]" />
-          Export Run CSV
-        </a>
+      {/* Active Signal Source Banner */}
+      <div className="flex items-center gap-3 p-3 rounded-lg bg-[#E8F5E9] border border-[#A5D6A7] text-xs">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#2E7D32] animate-pulse shrink-0" />
+        <div>
+          <span className="font-semibold text-[#2E7D32]">Active Signal Source:</span>{' '}
+          <span className="font-mono text-[#253247]">
+            {userSignal.filename} — {userSignal.totalSamples} samples @ {userSignal.fs} Hz ({userSignal.channel})
+          </span>
+        </div>
       </div>
 
       {/* Control Toolbar */}
       <div className="eng-card py-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-end">
-          <div>
-            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
-              Simulation Run
-            </label>
-            <select
-              value={selectedRun}
-              onChange={(e) => {
-                setSelectedRun(e.target.value);
-                setWindowIdx(0);
-              }}
-              className="clean-select w-full"
-            >
-              {runs.map((r) => (
-                <option key={r.run_id} value={r.run_id}>
-                  {r.run_id} — {r.hazard_type} ({r.samples} samples)
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
-              Sensor Channel
-            </label>
-            <select
-              value={channel}
-              onChange={(e) => setChannel(e.target.value)}
-              className="clean-select w-full"
-            >
-              <option value="chassis_accel_z_g">chassis_accel_z_g (Vertical Acceleration)</option>
-              <option value="wheel_displacement_mm">wheel_displacement_mm (Wheel Hub Travel)</option>
-              <option value="suspension_deflection_mm">suspension_deflection_mm (Spring Deflection)</option>
-            </select>
-          </div>
-
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 items-end">
           <div>
             <label className="block text-xs font-medium text-[#5A6B82] mb-1">
               Analysis Window Duration
@@ -155,16 +144,25 @@ export const MonitoringPage: React.FC = () => {
               }}
               className="clean-select w-full"
             >
-              <option value="0.25">0.25 s (25 samples @ 100 Hz)</option>
-              <option value="0.5">0.50 s (50 samples @ 100 Hz)</option>
-              <option value="1.0">1.00 s (100 samples @ 100 Hz)</option>
+              <option value="0.25">0.25 s ({Math.round(userSignal.fs * 0.25)} samples @ {userSignal.fs} Hz)</option>
+              <option value="0.5">0.50 s ({Math.round(userSignal.fs * 0.5)} samples @ {userSignal.fs} Hz)</option>
+              <option value="1.0">1.00 s ({Math.round(userSignal.fs * 1.0)} samples @ {userSignal.fs} Hz)</option>
             </select>
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-[#5A6B82] mb-1">
+              Signal Source
+            </label>
+            <div className="px-3 py-1.5 rounded border border-[#E2E6EC] bg-[#F7F8FA] text-xs text-[#253247] font-mono">
+              {userSignal.filename} ({userSignal.channel})
+            </div>
           </div>
 
           {/* Window Navigation Controls */}
           <div>
             <label className="block text-xs font-medium text-[#5A6B82] mb-1">
-              Window {signalData ? `${windowIdx + 1} of ${signalData.total_windows}` : '—'}
+              Window {windowIdx + 1} of {totalWindows}
             </label>
             <div className="flex items-center gap-1.5">
               <button
@@ -179,14 +177,14 @@ export const MonitoringPage: React.FC = () => {
               <input
                 type="range"
                 min="0"
-                max={signalData ? Math.max(0, signalData.total_windows - 1) : 0}
+                max={Math.max(0, totalWindows - 1)}
                 value={windowIdx}
                 onChange={(e) => setWindowIdx(parseInt(e.target.value))}
                 className="w-full accent-[#5579A8] cursor-pointer"
               />
 
               <button
-                disabled={signalData ? windowIdx >= signalData.total_windows - 1 : true}
+                disabled={windowIdx >= totalWindows - 1}
                 onClick={() => setWindowIdx((prev) => prev + 1)}
                 className="px-2.5 py-1.5 rounded border border-[#E2E6EC] bg-white text-xs text-[#253247] hover:bg-[#F7F8FA] disabled:opacity-40 transition-colors"
                 title="Next Window"
@@ -204,22 +202,27 @@ export const MonitoringPage: React.FC = () => {
         <div className="lg:col-span-2 space-y-2">
           <div className="flex items-center justify-between text-xs text-[#5A6B82]">
             <span className="font-semibold text-[#253247]">
-              Windowed Waveform: {selectedRun} — Segment {windowIdx + 1}
+              Windowed Waveform: {userSignal.filename} — Segment {windowIdx + 1}
             </span>
-            <span>Sampling: 100 Hz | Interval: 10 ms</span>
+            <span>Sampling: {userSignal.fs} Hz | Interval: {(1000 / userSignal.fs).toFixed(1)} ms</span>
           </div>
 
           {signalData ? (
             <OscilloscopeCanvas
               timeData={signalData.time_s}
               accelData={signalData.accel_g}
-              title={`Vibration Acceleration — ${channel}`}
+              title={`Vibration Acceleration — ${userSignal.channel}`}
               height={320}
               lineColor="#5579A8"
             />
           ) : (
             <div className="h-[320px] rounded-lg border border-[#E2E6EC] bg-white flex items-center justify-center text-xs text-[#8492A6]">
-              {loading ? 'Processing signal window...' : 'No telemetry data loaded.'}
+              {loading ? (
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 animate-spin text-[#5579A8]" />
+                  Processing signal window...
+                </div>
+              ) : 'No telemetry data loaded.'}
             </div>
           )}
         </div>
@@ -232,26 +235,32 @@ export const MonitoringPage: React.FC = () => {
                 Road Condition Classification
               </div>
               <div className="mt-2.5">
-                <span
-                  className={`badge-clean text-sm font-semibold px-3 py-1.5 ${
-                    isPothole
-                      ? 'badge-red'
-                      : isSmooth
-                      ? 'badge-green'
-                      : 'badge-amber'
-                  }`}
-                >
-                  {isPothole ? (
-                    <AlertTriangle className="w-4 h-4 text-[#C62828]" />
-                  ) : (
-                    <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
-                  )}
-                  {currentClass.replace('_', ' ')}
-                </span>
+                {predictedClass ? (
+                  <span
+                    className={`badge-clean text-sm font-semibold px-3 py-1.5 ${
+                      isPothole
+                        ? 'badge-red'
+                        : isSmooth
+                        ? 'badge-green'
+                        : 'badge-amber'
+                    }`}
+                  >
+                    {isPothole ? (
+                      <AlertTriangle className="w-4 h-4 text-[#C62828]" />
+                    ) : (
+                      <CheckCircle2 className="w-4 h-4 text-[#2E7D32]" />
+                    )}
+                    {predictedClass.replace('_', ' ')}
+                  </span>
+                ) : (
+                  <span className="badge-clean text-xs text-[#8492A6]">
+                    Awaiting Model Inference...
+                  </span>
+                )}
               </div>
             </div>
 
-            {/* Comparison of Actual Measurement vs Model Prediction */}
+            {/* Model Prediction Details */}
             <div className="space-y-2.5 pt-2 border-t border-[#E2E6EC] text-xs">
               <div className="flex justify-between items-center py-1">
                 <span className="text-[#5A6B82]">Model Prediction</span>
@@ -270,22 +279,9 @@ export const MonitoringPage: React.FC = () => {
               </div>
 
               <div className="flex justify-between items-center py-1">
-                <span className="text-[#5A6B82]">Dataset Label</span>
+                <span className="text-[#5A6B82]">Data Source</span>
                 <span className="font-mono text-[#253247]">
-                  {groundTruth || '—'}
-                </span>
-              </div>
-
-              <div className="flex justify-between items-center py-1">
-                <span className="text-[#5A6B82]">Prediction Match</span>
-                <span
-                  className={`text-[11px] font-medium px-2 py-0.5 rounded ${
-                    isMatch
-                      ? 'bg-[#E8F5E9] text-[#2E7D32]'
-                      : 'bg-[#FFF8E1] text-[#B78103]'
-                  }`}
-                >
-                  {isMatch ? 'Matches Ground Truth' : 'Discrepancy / Holdout'}
+                  User Input ({userSignal.filename})
                 </span>
               </div>
             </div>

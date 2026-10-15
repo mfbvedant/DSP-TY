@@ -17,10 +17,12 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 import pandas as pd
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
+
+from src.input_analyzer import analyze_road_data
 
 from src.data_loader import (
     load_csv, validate_columns, inspect_dataset, get_sampling_frequency,
@@ -322,6 +324,247 @@ def predict_road_condition(req: PredictRequest):
             "std": round(float(np.std(w_data)), 4),
         }
     }
+
+@app.post("/api/analyze")
+async def analyze_road(request: Request):
+    """Universal Road Condition Analysis Endpoint.
+
+    Accepts pasted raw text/CSV (JSON body) or uploaded files (multipart/form-data)
+    and executes validation, sampling determination, DSP processing, feature extraction,
+    and genuine machine-learning inference.
+    """
+    content_type = request.headers.get("content-type", "")
+    content = None
+    filename = None
+    assumed_fs = None
+
+    if "multipart/form-data" in content_type:
+        form = await request.form()
+        uploaded_file = form.get("file")
+        if uploaded_file and hasattr(uploaded_file, "read"):
+            content = await uploaded_file.read()
+            filename = getattr(uploaded_file, "filename", "uploaded_file.csv")
+        else:
+            pasted = form.get("data")
+            if pasted:
+                content = str(pasted)
+                filename = form.get("filename") or "pasted_data.txt"
+
+        fs_val = form.get("assumed_fs")
+        if fs_val:
+            try:
+                assumed_fs = float(fs_val)
+            except ValueError:
+                pass
+    else:
+        # JSON body
+        try:
+            body = await request.json()
+        except Exception:
+            raise HTTPException(status_code=400, detail="Invalid JSON or form payload.")
+        content = body.get("data")
+        filename = body.get("filename", "pasted_data.txt")
+        assumed_fs = body.get("assumed_fs")
+        if assumed_fs is not None:
+            try:
+                assumed_fs = float(assumed_fs)
+            except ValueError:
+                assumed_fs = None
+
+    if not content:
+        raise HTTPException(
+            status_code=400,
+            detail="No vibration data received. Please provide a file or pasted text.",
+        )
+
+    try:
+        result = analyze_road_data(content, filename=filename, assumed_fs=assumed_fs)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analysis pipeline error: {str(e)}")
+
+# ------------------------------------------------------------------ #
+# User-Provided Signal Endpoints (Operate on OverviewPage input)     #
+# ------------------------------------------------------------------ #
+
+class UserSignalFilterRequest(BaseModel):
+    signal: List[float]
+    fs: float
+    filter_family: str = "FIR"
+    filter_type: str = "lowpass"
+    cutoff: Union[float, List[float]] = 12.0
+    order: int = 51
+
+class UserSignalFFTRequest(BaseModel):
+    signal: List[float]
+    fs: float
+    window_idx: int = 0
+    window_duration_s: float = 0.5
+    window_function: str = "hann"
+
+class UserSignalWindowRequest(BaseModel):
+    signal: List[float]
+    fs: float
+    window_idx: int = 0
+    window_duration_s: float = 0.5
+
+class UserSignalPredictRequest(BaseModel):
+    signal: List[float]
+    fs: float
+    window_idx: int = 0
+    window_duration_s: float = 0.5
+
+
+@app.post("/api/user-signal/filter")
+def user_signal_filter(req: UserSignalFilterRequest):
+    """Apply FIR/IIR filter to user-provided signal array."""
+    a = np.array(req.signal, dtype=np.float64)
+    a = a - np.mean(a)  # DC offset removal
+    r_fs = req.fs
+    t = np.arange(len(a)) / r_fs
+
+    try:
+        from scipy.signal import freqz, sosfreqz
+        if req.filter_family.upper() == "FIR":
+            b = design_fir(r_fs, req.cutoff, req.filter_type, req.order)
+            a_denom = [1.0]
+            filt_sig = apply_fir(a, b)
+            w, h = freqz(b, a_denom, worN=512, fs=r_fs)
+        else:
+            sos = design_iir_butterworth(r_fs, req.cutoff, req.filter_type, req.order)
+            b_coeff, a_denom = iir_coefficients_ba(r_fs, req.cutoff, req.filter_type, req.order)
+            filt_sig = apply_iir(a, sos)
+            w, h = sosfreqz(sos, worN=512, fs=r_fs)
+
+        mag_db = 20 * np.log10(np.maximum(np.abs(h), 1e-5))
+        phase_deg = np.unwrap(np.angle(h)) * 180 / np.pi
+
+        rms_raw = float(np.sqrt(np.mean(a ** 2)))
+        rms_filt = float(np.sqrt(np.mean(filt_sig ** 2)))
+        atten_pct = ((rms_raw - rms_filt) / rms_raw * 100) if rms_raw > 0 else 0.0
+
+        return {
+            "time_s": [round(x, 4) for x in t.tolist()],
+            "raw_accel_g": [round(x, 4) for x in a.tolist()],
+            "filtered_accel_g": [round(x, 4) for x in filt_sig.tolist()],
+            "freq_hz": [round(x, 2) for x in w.tolist()],
+            "magnitude_db": [round(x, 2) for x in mag_db.tolist()],
+            "phase_deg": [round(x, 2) for x in phase_deg.tolist()],
+            "metrics": {
+                "rms_raw": round(rms_raw, 4),
+                "rms_filtered": round(rms_filt, 4),
+                "attenuation_pct": round(atten_pct, 1),
+                "peak_raw": round(float(np.max(np.abs(a))), 4),
+                "peak_filtered": round(float(np.max(np.abs(filt_sig))), 4),
+            }
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/user-signal/fft")
+def user_signal_fft(req: UserSignalFFTRequest):
+    """Compute FFT on user-provided signal array."""
+    a = np.array(req.signal, dtype=np.float64)
+    a = a - np.mean(a)  # DC offset removal
+    r_fs = req.fs
+    win_size = max(10, int(r_fs * req.window_duration_s))
+    wins = create_windows(a, win_size, overlap=0.0)
+
+    if not wins or req.window_idx >= len(wins):
+        raise HTTPException(status_code=400, detail="Window index out of bounds for the provided signal length.")
+
+    w_data = wins[req.window_idx]
+    freqs, mag = compute_fft(w_data, r_fs, window=req.window_function)
+    dom_f = dominant_frequency(freqs, mag)
+    s_centroid = spectral_centroid(freqs, mag)
+    s_spread = spectral_spread(freqs, mag, centroid=s_centroid)
+    s_energy = spectral_energy(mag)
+    df_res = frequency_resolution(r_fs, len(w_data))
+
+    return {
+        "freqs_hz": [round(x, 2) for x in freqs.tolist()],
+        "magnitude": [round(x, 5) for x in mag.tolist()],
+        "dominant_freq_hz": round(dom_f, 2),
+        "spectral_centroid_hz": round(s_centroid, 2),
+        "spectral_spread_hz": round(s_spread, 2),
+        "spectral_energy": round(s_energy, 5),
+        "frequency_resolution_hz": round(df_res, 3),
+        "window_function": req.window_function,
+        "total_windows": len(wins),
+    }
+
+
+@app.post("/api/user-signal/window")
+def user_signal_window(req: UserSignalWindowRequest):
+    """Get a windowed segment from user-provided signal array."""
+    a = np.array(req.signal, dtype=np.float64)
+    a = a - np.mean(a)  # DC offset removal
+    r_fs = req.fs
+    win_size = max(10, int(r_fs * req.window_duration_s))
+    wins = create_windows(a, win_size, overlap=0.0)
+
+    if not wins or req.window_idx >= len(wins):
+        raise HTTPException(status_code=400, detail="Window index out of bounds for the provided signal length.")
+
+    w_data = wins[req.window_idx]
+    t_start = (req.window_idx * win_size) / r_fs
+    w_time = (np.arange(len(w_data)) / r_fs) + t_start
+
+    rms = float(np.sqrt(np.mean(w_data ** 2)))
+    peak = float(np.max(np.abs(w_data)))
+    crest = peak / rms if rms > 0 else 0.0
+
+    return {
+        "window_idx": req.window_idx,
+        "total_windows": len(wins),
+        "time_s": [round(x, 4) for x in w_time.tolist()],
+        "accel_g": [round(x, 4) for x in w_data.tolist()],
+        "metrics": {
+            "rms": round(rms, 4),
+            "peak": round(peak, 4),
+            "crest_factor": round(crest, 2),
+            "p2p": round(float(np.max(w_data) - np.min(w_data)), 4),
+            "std": round(float(np.std(w_data)), 4),
+        }
+    }
+
+
+@app.post("/api/user-signal/predict")
+def user_signal_predict(req: UserSignalPredictRequest):
+    """Predict road condition from user-provided signal array."""
+    a = np.array(req.signal, dtype=np.float64)
+    a = a - np.mean(a)  # DC offset removal
+    r_fs = req.fs
+    win_size = max(10, int(r_fs * req.window_duration_s))
+    wins = create_windows(a, win_size, overlap=0.0)
+
+    if not wins or req.window_idx >= len(wins):
+        raise HTTPException(status_code=400, detail="Window index out of bounds for the provided signal length.")
+
+    w_data = wins[req.window_idx]
+    pred_res = predict_window(w_data, r_fs)
+
+    rms = float(np.sqrt(np.mean(w_data ** 2)))
+    peak = float(np.max(np.abs(w_data)))
+    crest = peak / rms if rms > 0 else 0.0
+
+    return {
+        "predicted_class": pred_res["predicted_class"],
+        "confidence": round(pred_res["confidence"], 4) if pred_res["confidence"] else None,
+        "all_classes": pred_res["all_classes"],
+        "probabilities": [round(p, 4) for p in pred_res["probabilities"]] if pred_res["probabilities"] is not None else None,
+        "ground_truth": "USER_INPUT",
+        "total_windows": len(wins),
+        "metrics": {
+            "rms": round(rms, 4),
+            "peak": round(peak, 4),
+            "crest_factor": round(crest, 2),
+            "p2p": round(float(np.max(w_data) - np.min(w_data)), 4),
+            "std": round(float(np.std(w_data)), 4),
+        }
+    }
+
 
 @app.get("/api/evaluation")
 def get_evaluation():

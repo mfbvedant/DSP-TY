@@ -90,17 +90,34 @@ def split_by_group(
     X_train, X_test, y_train, y_test
     """
     unique_groups = np.unique(groups)
+    all_classes = np.unique(y)
+
     if len(unique_groups) <= 1:
         # Cannot split by group — fall back
         from sklearn.model_selection import train_test_split
-        return train_test_split(X, y, test_size=test_size_ratio,
-                                random_state=RANDOM_SEED, stratify=y if len(np.unique(y)) > 1 else None)
+        return train_test_split(
+            X, y, test_size=test_size_ratio,
+            random_state=RANDOM_SEED,
+            stratify=y if len(all_classes) > 1 else None,
+        )
 
     # Use last group(s) as test; rest as train
     n_test = max(1, int(len(unique_groups) * test_size_ratio))
     test_groups = set(unique_groups[-n_test:])
 
     test_mask = np.isin(groups, list(test_groups))
+    train_classes = np.unique(y[~test_mask])
+
+    # If holding out groups would hide any class completely from training,
+    # fall back to stratified window split to ensure all classes are learnable
+    if len(train_classes) < len(all_classes):
+        from sklearn.model_selection import train_test_split
+        return train_test_split(
+            X, y, test_size=test_size_ratio,
+            random_state=RANDOM_SEED,
+            stratify=y if len(all_classes) > 1 else None,
+        )
+
     X_train, y_train = X[~test_mask], y[~test_mask]
     X_test, y_test = X[test_mask], y[test_mask]
     return X_train, X_test, y_train, y_test
@@ -237,6 +254,7 @@ def load_model(model_name: str = "best_model") -> Dict:
 
 def run_full_pipeline(
     feature_df: pd.DataFrame,
+    model_name: str = "best_model",
 ) -> Dict:
     """End-to-end training pipeline: prepare → split → train → evaluate → save.
 
@@ -259,13 +277,18 @@ def run_full_pipeline(
     svm_metrics = evaluate_model(svm, X_test, y_test, label_names, scaler=scaler)
     results["SVM"] = svm_metrics
 
-    # Pick the best by F1
+    # Pick the best by F1 score
     best_name = max(results, key=lambda k: results[k]["f1"])
-    best_clf = rf if best_name == "RandomForest" else svm
-    best_scaler = None if best_name == "RandomForest" else scaler
+
+    # Fit the production model on all available samples so all classes are known
+    if best_name == "RandomForest":
+        best_clf = train_random_forest(X, y)
+        best_scaler = None
+    else:
+        best_clf, best_scaler = train_svm(X, y)
 
     save_model(best_clf, feature_names, le,
-               model_name="best_model", scaler=best_scaler)
+               model_name=model_name, scaler=best_scaler)
 
     results["best_model_name"] = best_name
     results["feature_names"] = feature_names

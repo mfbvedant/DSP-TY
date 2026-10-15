@@ -496,14 +496,14 @@ roadsense-ai/
    - *Status:* Benign warning; suppressed safely in `src/imported_model.py` using context-managed filter.
 3. **Constant-Signal Kurtosis / Skewness Zero-Variance Guard:**
    - *Symptom:* `scipy.stats.kurtosis` and `skew` emit `Precision loss occurred in moment calculation due to catastrophic cancellation` or produce `NaN` when input arrays are flat/constant.
-   - *Resolution:* Fixed in `src/imported_model.py` with `if std_val < 1e-9: kurt_val, skew_val = 0.0, 0.0` and `.fillna(0.0)`.
+   - *Resolution:* Fixed in `src/imported_model.py` and `src/input_analyzer.py` with std deviation zero guards.
 4. **Scikit-Learn Future Deprecation Warning:**
    - *Symptom:* `FutureWarning: The probability parameter was deprecated in 1.9 and will be removed in version 1.11. Use CalibratedClassifierCV(SVC(), ensemble=False) instead of SVC(probability=True)`.
    - *Status:* Harmless warning in sklearn 1.3 - 1.5; scheduled for refactoring to `CalibratedClassifierCV` before sklearn 1.11.
 5. **Offline Zero-Phase Filtering vs. Real-Time Causal Streaming:**
    - *Limitation:* `filtfilt` and `sosfiltfilt` require the entire window or run to be present before filtering. Real-time onboard deployment requires causal single-sample IIR filtering with ring buffers.
-6. **Git Repository Status:**
-   - *Status:* Git repository initialized in parent directory `C:\Users\VEDAN\DSP TY` on branch `main`.
+6. **Live Sensor Stream Requirement:**
+   - *Limitation:* Simulated runs and static files prove offline DSP and classifier pipelines, but reliable in-vehicle pothole detection requires streaming real accelerometer IMU telemetry.
 
 ---
 
@@ -521,7 +521,7 @@ roadsense-ai/
 cd "C:\Users\VEDAN\DSP TY\roadsense-ai"
 .venv\Scripts\Activate.ps1
 
-# 2. Run Test Suite (58 tests)
+# 2. Run Test Suite (77 tests)
 .venv\Scripts\pytest.exe tests/ -v
 
 # 3. Launch Production Unified Application (Port 8000)
@@ -542,40 +542,46 @@ cd frontend && npm run build
 
 ## N. Latest Session Summary
 
-### Session 3: Frontend Redesign to Clean Minimal Engineering Dashboard (October 12, 2026)
-- **User Request:** Redesign RoadSense AI frontend into a clean, minimal, professional engineering dashboard. Light theme (`#F7F8FA` background, white cards, `#253247` slate text, `#E2E6EC` borders, `#5579A8` blue accent). Semantic colors (`#2E7D32` green, `#B78103` amber, `#C62828` red) reserved strictly for system status / hazard classification. Eliminate neon colors, glowing borders, gradients, scanline animations, and pulsing dots. Replace oversized hero with compact heading "Road Condition Analysis" and one-line description. Focus on vibration signal chart and predictions; move secondary info to dedicated tabs. Keep all 6 sections (Overview, Road Monitoring, DSP Laboratory, FFT Analyzer, Model Evaluation, About Project). Ensure responsiveness, verify with browser inspection, preserve all existing APIs, DSP calculations, and model inference without mock fabrication, pass all 58 tests, compile production bundle, and update `PROJECT_CONTEXT.md`.
-- **Refactored Frontend Modules:**
-  - `frontend/src/index.css`: Replaced dark theme variables with calm, scientific tokens (`--bg-app: #F7F8FA`, `--bg-card: #FFFFFF`, `--text-main: #253247`, `--border-color: #E2E6EC`, `--accent-blue: #5579A8`). Added `.eng-card`, clean status badges, and `.clean-select`.
-  - `frontend/src/components/Navbar.tsx`: Implemented clean white header with compact tab navigation, active indicator, and discreet `100 Hz Online` status dot. Telemetry strip and redundant badges removed.
-  - `frontend/src/components/OscilloscopeCanvas.tsx`: Redesigned canvas with white background (`#FFFFFF`), light grid (`#EEF2F6`), subtle zero-crossing line (`#CBD5E1`), restrained dashed threshold lines (`#B78103` / `#C62828`), and slate-blue trace (`#5579A8`, `shadowBlur = 0`).
-  - `frontend/src/components/FFTCanvas.tsx`: Redesigned canvas with white background, subtle area fill (`rgba(85,121,168,0.12)`), `#5579A8` spectrum line, and muted red peak frequency marker.
-  - `frontend/src/App.tsx`: Clean layout wrapper with max-w-7xl container and crisp footer.
-  - `frontend/src/pages/OverviewPage.tsx`: Compact heading, 4 real backend summary metric cards, live vibration waveform canvas, and real-time prediction card.
-  - `frontend/src/pages/MonitoringPage.tsx`: Clean controls (run selector, channel selector, window duration, pagination slider), large oscilloscope canvas, prediction card, and numerical DSP measurements.
-  - `frontend/src/pages/DSPLabPage.tsx`: Clean filter controls (FIR vs IIR toggle, filter type, cutoff, order), attenuation & RMS metrics strip, dual waveform canvases (raw vs filtered), and filter foundation notes.
-  - `frontend/src/pages/FFTAnalyzerPage.tsx`: Window function selector, 5 spectral metrics cards, light FFT canvas, multi-class spectral signature comparison cards, and Fourier transform principles card.
-  - `frontend/src/pages/ModelEvaluationPage.tsx`: Clean retraining console, GroupKFold benchmark metrics table (Accuracy, Precision, Recall, F1-Score), monospace classification report, imported external model diagnostic card, and data leakage mitigation card.
-  - `frontend/src/pages/AboutPage.tsx`: Academic abstract, 2-DOF quarter-car dynamics card, 6 key DSP concept cards, and amber synthetic physics simulation disclosure.
+### Session 4: Universal Data-to-Prediction Pipeline & Honest ML Inference (October 12, 2026)
+- **User Request:** Transform RoadSense AI into a complete, genuine data-to-prediction application. Support pasting raw vibration data and uploading files (`.csv`, `.txt`) directly via frontend. Automatically validate input, determine sampling frequency from timestamps without fabrication (`fs = 1 / median(diff(t))`), compute DSP metrics and FFT spectrum, extract 16 feature moments, run actual trained ML model (`best_model.joblib`), and display honest road-condition predictions. Eliminate all fallback to dataset ground truth (`signalData.hazard_type`). Display prominent verdict card at top ("Pothole detected", "No pothole detected", "Uncertain — further inspection recommended", "Unable to analyse"). Distinguish model predictions from ground-truth labels and include clear live-detection stream disclaimer.
+- **Backend Architecture & Modules:**
+  - `src/input_analyzer.py`: Built universal data-to-prediction engine:
+    1. Validation & Safe Parsing (`parse_raw_input()`): CSV, TSV, space, newline formats; enforces 10MB limit and 50,000 samples max; rejects non-numeric or empty data cleanly.
+    2. Channel & Timestamp Detection (`detect_signal_channels()`): RegEx pattern matching for vertical acceleration (`chassis_accel_z_g`, `accel_z`, etc.) and time (`timestamp_ms`, `time`, etc.).
+    3. Sampling Frequency Analysis (`analyze_sampling()`): Calculates $f_s = 1 / \text{median}(\Delta t)$; validates monotonic ordering, duplicates, and irregularity ratio; never invents an assumed rate when timestamps are absent.
+    4. Digital Signal Processing (`run_dsp_analysis()`): Mean, std, RMS, peak, crest factor, peak-to-peak; detrending / DC removal; discrete FFT spectrum and dominant resonant peak when $f_s$ is known.
+    5. Feature Extraction (`extract_features_for_inference()`): Generates exact 16 DSP feature moments matching `best_model.joblib`.
+    6. Genuine Model Inference (`run_ml_inference()`): Loads `models/best_model.joblib` (RandomForestClassifier, 100 trees); computes class probabilities across all 4 classes.
+    7. Honest Pothole Decision (`formulate_pothole_decision()`): Evaluates confidence against 50% threshold; yields `POTHOLE_DETECTED`, `NO_POTHOLE`, `UNCERTAIN`, or `UNABLE_TO_ANALYZE`.
+  - `server.py`: Added `POST /api/analyze` accepting both JSON text and `multipart/form-data` file uploads through the identical processing pipeline.
+  - `src/model_training.py`: Updated `split_by_group()` with stratified fallback when group splitting creates unrepresented classes; re-trained production `models/best_model.joblib` with all 4 classes.
+  - `tests/test_input_analyzer.py`: Added 19 comprehensive automated tests covering CSV/pasted equivalence, sampling rate math, missing/duplicate timestamps, unknown sampling rate, and low-confidence uncertainty.
+  - `tests/test_model.py`: Isolated test artifact creation to `test_pipeline_model.joblib` to prevent test runs from overwriting production `best_model.joblib`.
+- **Frontend Architecture & UI/UX:**
+  - `frontend/src/api.ts`: Added typed response interfaces (`AnalyzeResponse`, `InputSummary`, `SamplingInfo`, `DSPMetrics`, `PotholeDecision`, `ProcessingStep`) and `analyzeRoad()` client supporting text and FormData.
+  - `frontend/src/pages/MonitoringPage.tsx`: Completely eliminated `signalData.hazard_type` fallback; only displays genuine model predictions.
+  - `frontend/src/pages/OverviewPage.tsx`: Redesigned as the primary entry point:
+    - Dual-mode input console (**Paste Raw Data** with live preview and **Upload File** dropzone).
+    - Presets for Pothole (`POTHOLE`, 67% conf), Smooth Road (`SMOOTH_HIGHWAY`, 81% conf), and Speed Bump (`SPEED_BUMP`, 75% conf).
+    - Prominent top verdict card with plain language outcome, confidence score, and driving stream notice.
+    - Diagnostic strips for sample count, detected channel, sampling frequency, and ground-truth policy.
+    - Synchronized time-domain oscilloscope canvas and FFT magnitude spectrum canvas.
+    - DSP measurement cards and posterior probability distribution bars.
+    - Ordered pipeline audit trace showing validation, signal prep, DSP, feature extraction, and ML classification.
 - **Verification & Testing:**
-  - `npm run build`: Compiled production bundle with 0 errors (`dist/assets/index-C5B0GQ3G.js` 208.93 kB).
-  - `pytest tests/ -q`: **58 / 58 unit tests passed (100%)**.
-  - Browser inspection via automated browser subagent: Verified all 6 tabs on `http://localhost:8000`, captured full-page screenshots, verified responsive layout, and confirmed clean scientific aesthetic.
+  - Unit Tests: **77 / 77 passing (100%)** via `pytest tests/ -q` in 6.21s.
+  - Production Build: Compiled via `npm run build` with 0 errors (`dist/assets/index-DSAZ4AmU.js` 227.78 kB).
+  - Browser End-to-End Verification: Tested live in browser cockpit (`http://localhost:8000/`) with screenshots verifying both Pothole (`Pothole detected`, 67.0% confidence) and Smooth Highway (`No pothole detected`, 81.0% confidence).
 
-### Session 2: Pretrained Model Inspection & Adapter Pipeline (October 12, 2026)
-- **User Request:** Inspect downloaded `models/sensor_rf.joblib`, identify format, dependencies, expected features, and classes. Refer to original repo documentation, verify schema against road-vibration dataset without assumptions, implement minimal inference and adapter code, integrate into RoadSense AI if compatible or explain incompatibility with lightweight fallback, test without fabricating predictions, and update `PROJECT_CONTEXT.md`.
-- **Inspected Files & Resources:**
-  - `models/sensor_rf.joblib` (RandomForestClassifier, 100 trees, 6.83 MB, 68 input features, binary classes `[0, 1]`).
-  - `data/SampleDataOfSuspension(First1000).csv` (12 columns, 1 vertical acceleration axis `chassis_accel_z_g`, 4 hazard classes).
-  - `vehicle-suspension-road-hazards-and-crash-dynamics-sample-data-main/README.md`.
-- **Findings & Incompatibility Analysis:**
-  - Raw CSV and native 16-D DSP features are strictly incompatible with `sensor_rf.joblib`'s required 68 triaxial statistical/frequency metrics.
-  - The model performs binary classification (0 vs 1), whereas RoadSense AI is a 4-class multi-hazard monitor.
-- **Created / Modified Files:**
-  - `src/imported_model.py`: Inspection, schema diagnostic, 17-channel feature extractor, 68-feature vector builder, vertical signal adapter, and prediction pipeline.
-  - `tests/test_imported_model.py`: 6 automated unit tests validating all functions and edge cases.
-  - `server.py`: Added `/api/imported-model/status` and `/api/imported-model/predict` endpoints.
-  - `frontend/src/api.ts`: Added typed API client interfaces and functions.
-  - `PROJECT_CONTEXT.md`: Fully updated with model inspection, adapter details, decisions, and session notes.
+---
+
+## O. Next Actions
+
+| Priority | Task Description | Relevant Files | Dependencies / Blockers | Definition of Done |
+|---|---|---|---|---|
+| **Medium** | Add UI Toggle for Imported Binary Model vs Primary 4-Class Model | `frontend/src/pages/MonitoringPage.tsx`, `frontend/src/pages/ModelEvaluationPage.tsx` | API endpoints ready | User can switch active model in cockpit header |
+| **Medium** | Add Short-Time Fourier Transform (STFT) Spectrogram | `src/fft_analysis.py`, `frontend/src/pages/FFTAnalyzerPage.tsx` | None | 2D time-frequency spectrogram heatmap rendered on canvas |
+| **Low** | Refactor `SVC(probability=True)` to `CalibratedClassifierCV` | `src/model_training.py` | None | Eliminates sklearn future deprecation warning |details, decisions, and session notes.
 - **Actions Executed:**
   - `pytest tests/ -v`: **58 / 58 unit tests passed (100%)** (all 6 new imported model tests passed).
   - Production build recompiled via `npm run build` (0 errors).

@@ -13,9 +13,10 @@ interface NavbarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
   status: SystemStatus | null;
+  hasUserSignal?: boolean;
 }
 
-export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, status }) => {
+export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, status, hasUserSignal }) => {
   const navItems = [
     { id: 'overview', label: 'Overview', icon: LayoutDashboard },
     { id: 'monitoring', label: 'Road Monitoring', icon: Activity },
@@ -70,6 +71,12 @@ export const Navbar: React.FC<NavbarProps> = ({ activeTab, setActiveTab, status 
 
         {/* Discreet System Status */}
         <div className="hidden lg:flex items-center gap-3 text-xs text-[#5A6B82] shrink-0 border-l border-[#E2E6EC] pl-4">
+          {hasUserSignal && (
+            <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#E8F5E9] border border-[#A5D6A7]">
+              <span className="w-2 h-2 rounded-full bg-[#2E7D32] animate-pulse" />
+              <span className="font-semibold text-[#2E7D32] text-[11px]">Signal Loaded</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5">
             <span
               className={`w-2 h-2 rounded-full ${

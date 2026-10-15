@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchStatus, SystemStatus } from './api';
+import { fetchStatus, SystemStatus, UserSignalData } from './api';
 import { Navbar } from './components/Navbar';
 import { OverviewPage } from './pages/OverviewPage';
 import { MonitoringPage } from './pages/MonitoringPage';
@@ -11,6 +11,7 @@ import { AboutPage } from './pages/AboutPage';
 export function App() {
   const [activeTab, setActiveTab] = useState<string>('overview');
   const [status, setStatus] = useState<SystemStatus | null>(null);
+  const [userSignal, setUserSignal] = useState<UserSignalData | null>(null);
 
   useEffect(() => {
     fetchStatus()
@@ -21,16 +22,20 @@ export function App() {
   return (
     <div className="min-h-screen bg-[#F7F8FA] text-[#253247] flex flex-col">
       {/* Clean Header */}
-      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} status={status} />
+      <Navbar activeTab={activeTab} setActiveTab={setActiveTab} status={status} hasUserSignal={!!userSignal} />
 
       {/* Main Content Area */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 pt-6 pb-12">
         {activeTab === 'overview' && (
-          <OverviewPage onNavigate={(tab) => setActiveTab(tab)} status={status} />
+          <OverviewPage
+            onNavigate={(tab) => setActiveTab(tab)}
+            status={status}
+            onSignalAnalyzed={setUserSignal}
+          />
         )}
-        {activeTab === 'monitoring' && <MonitoringPage />}
-        {activeTab === 'dsp_lab' && <DSPLabPage />}
-        {activeTab === 'fft' && <FFTAnalyzerPage />}
+        {activeTab === 'monitoring' && <MonitoringPage userSignal={userSignal} />}
+        {activeTab === 'dsp_lab' && <DSPLabPage userSignal={userSignal} />}
+        {activeTab === 'fft' && <FFTAnalyzerPage userSignal={userSignal} />}
         {activeTab === 'model' && <ModelEvaluationPage />}
         {activeTab === 'about' && <AboutPage />}
       </main>
